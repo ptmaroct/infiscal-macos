@@ -4,6 +4,17 @@ A native macOS menubar app for quickly searching and managing secrets via the [I
 
 ![macOS](https://img.shields.io/badge/macOS-13%2B-black?logo=apple)
 ![Swift](https://img.shields.io/badge/Swift-5.9-orange?logo=swift)
+![License](https://img.shields.io/badge/License-MIT-blue)
+
+## Screenshots
+
+<p align="center">
+  <img src="assets/menubar.png" width="280" alt="Menubar dropdown" />
+  &nbsp;&nbsp;
+  <img src="assets/add-secret.png" width="280" alt="Add secret" />
+  &nbsp;&nbsp;
+  <img src="assets/settings.png" width="280" alt="Settings" />
+</p>
 
 ## Features
 
@@ -14,13 +25,17 @@ A native macOS menubar app for quickly searching and managing secrets via the [I
 - **Add secrets** — create new secrets with tags and comments without leaving your menubar
 - **Edit & delete** — update secret values/comments or delete secrets from the View All window
 - **Version tracking** — see the current version number for each secret
-- **Tags display** — view color-coded tags on each secret
+- **Tags display** — view tags on each secret
 - **Global shortcut** — `Cmd + Shift + K` toggles the menu from anywhere
 - **Direct dashboard link** — opens your project directly in the Infisical web dashboard
 - **CLI-powered** — uses your existing `infisical` CLI session, zero credential management
 - **Dark vault UI** — custom dark theme with amber accents and smooth animations
 
-## Prerequisites
+## Installation
+
+Download the latest `.dmg` from [Releases](https://github.com/ptmaroct/infiscal-macos/releases).
+
+### Prerequisites
 
 - macOS 13 (Ventura) or later
 - [Infisical CLI](https://infisical.com/docs/cli/overview) installed and logged in
@@ -30,13 +45,10 @@ brew install infisical
 infisical login
 ```
 
-## Build & Run
+### Build from source
 
 ```bash
-# Build
 swift build
-
-# Create .app bundle and launch
 bash scripts/bundle.sh
 open build/InfisicalMenu.app
 ```
