@@ -17,6 +17,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var secretsRangeStart: Int = 0
     private var secretsRangeEnd: Int = 0
 
+    /// Whether the current menu session is unlocked via Touch ID
+    private var isUnlocked: Bool = false
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupStatusItem()
         setupMenu()
@@ -49,6 +52,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func rebuildMenu() {
         menu.removeAllItems()
+
+        // Check if Touch ID gate is needed
+        if TouchIDService.shared.requiresAuthentication && !isUnlocked {
+            rebuildLockedMenu()
+            return
+        }
 
         // Search field
         let searchItem = NSMenuItem()
@@ -93,6 +102,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(NSMenuItem.separator())
 
         // Settings
+        let settingsItem = NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ",")
+        settingsItem.target = self
+        menu.addItem(settingsItem)
+
+        // Quit
+        let quitItem = NSMenuItem(title: "Quit InfisicalMenu", action: #selector(quit), keyEquivalent: "q")
+        quitItem.target = self
+        menu.addItem(quitItem)
+    }
+
+    /// Build a locked menu that only shows Touch ID unlock option
+    private func rebuildLockedMenu() {
+        // Lock icon header
+        let headerItem = NSMenuItem(title: "Vault Locked", action: nil, keyEquivalent: "")
+        headerItem.isEnabled = false
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 13, weight: .semibold),
+            .foregroundColor: NSColor.white.withAlphaComponent(0.7)
+        ]
+        headerItem.attributedTitle = NSAttributedString(string: "  Vault Locked", attributes: attrs)
+        if let lockImage = NSImage(systemSymbolName: "lock.fill", accessibilityDescription: "Locked") {
+            lockImage.isTemplate = true
+            headerItem.image = lockImage
+        }
+        menu.addItem(headerItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        // Unlock with Touch ID
+        let unlockItem = NSMenuItem(title: "Unlock with Touch ID", action: #selector(unlockWithTouchID), keyEquivalent: "")
+        unlockItem.target = self
+        if let touchIDImage = NSImage(systemSymbolName: "touchid", accessibilityDescription: "Touch ID") {
+            touchIDImage.isTemplate = true
+            unlockItem.image = touchIDImage
+        }
+        menu.addItem(unlockItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        // Settings (always accessible)
         let settingsItem = NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ",")
         settingsItem.target = self
         menu.addItem(settingsItem)
@@ -164,19 +213,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func menuWillOpen(_ menu: NSMenu) {
         viewModel.searchText = ""
+
+        // Reset unlock state for each menu open — re-evaluate timeout
+        isUnlocked = !TouchIDService.shared.requiresAuthentication
         rebuildMenu()
 
-        // Focus search field
-        DispatchQueue.main.async { [weak self] in
-            self?.searchField?.becomeFirstResponder()
-        }
+        // Only set up normal menu behavior if unlocked
+        if isUnlocked || !TouchIDSettings.load().isEnabled {
+            // Focus search field
+            DispatchQueue.main.async { [weak self] in
+                self?.searchField?.becomeFirstResponder()
+            }
 
-        // Refresh silently in background
-        if viewModel.isConfigured {
-            Task {
-                await viewModel.loadSecrets()
-                await MainActor.run {
-                    updateSecretItems()
+            // Refresh silently in background
+            if viewModel.isConfigured {
+                Task {
+                    await viewModel.loadSecrets()
+                    await MainActor.run {
+                        self.updateSecretItems()
+                    }
                 }
             }
         }
@@ -203,6 +258,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             button.image?.isTemplate = true
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                 button.image = original
+            }
+        }
+    }
+
+    @objc private func unlockWithTouchID() {
+        menu.cancelTracking()
+        Task {
+            let success = await TouchIDService.shared.authenticate()
+            if success {
+                isUnlocked = true
+                // Re-open the menu unlocked
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                    guard let self, let button = self.statusItem.button else { return }
+                    button.performClick(nil)
+                }
             }
         }
     }
@@ -242,7 +312,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let view = SettingsView(viewModel: viewModel) { [weak self] in
                 self?.settingsWindow?.close()
             }
-            settingsWindow = makeStyledWindow(view: view, width: 400, height: 440)
+            settingsWindow = makeStyledWindow(view: view, width: 400, height: 540)
         }
         settingsWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)

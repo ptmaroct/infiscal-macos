@@ -19,6 +19,11 @@ struct SettingsView: View {
     @State private var shortcutConflict: String?
     @State private var shortcutMonitor: Any?
 
+    // Touch ID state
+    @State private var touchIDEnabled: Bool = false
+    @State private var touchIDTimeout: TimeoutPreset = .fifteenMinutes
+    @State private var touchIDAvailable: Bool = false
+
     var body: some View {
         ZStack {
             // Glass background
@@ -199,6 +204,71 @@ struct SettingsView: View {
                                 }
                             }
 
+                            // Touch ID card
+                            if touchIDAvailable {
+                                glassCard {
+                                    VStack(spacing: 12) {
+                                        settingsRow(
+                                            icon: "touchid",
+                                            label: "Touch ID"
+                                        ) {
+                                            Toggle("", isOn: $touchIDEnabled)
+                                                .toggleStyle(.switch)
+                                                .controlSize(.small)
+                                                .tint(Color.vault.accent)
+                                        }
+
+                                        if touchIDEnabled {
+                                            Divider().opacity(0.2)
+
+                                            settingsRow(
+                                                icon: "timer",
+                                                label: "Require After"
+                                            ) {
+                                                Menu {
+                                                    ForEach(TimeoutPreset.allCases) { preset in
+                                                        Button {
+                                                            touchIDTimeout = preset
+                                                        } label: {
+                                                            HStack {
+                                                                Text(preset.displayName)
+                                                                if touchIDTimeout == preset {
+                                                                    Image(systemName: "checkmark")
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                } label: {
+                                                    HStack(spacing: 4) {
+                                                        Text(touchIDTimeout.displayName)
+                                                            .font(.system(size: 13))
+                                                            .foregroundColor(.white.opacity(0.85))
+                                                        Image(systemName: "chevron.up.chevron.down")
+                                                            .font(.system(size: 8))
+                                                            .foregroundColor(.white.opacity(0.4))
+                                                    }
+                                                }
+                                                .menuStyle(.borderlessButton)
+                                                .menuIndicator(.hidden)
+                                                .fixedSize()
+                                            }
+
+                                            HStack(spacing: 4) {
+                                                Image(systemName: "info.circle")
+                                                    .font(.system(size: 9))
+                                                Text(touchIDTimeout == .immediately
+                                                    ? "Touch ID required every time you open the menu"
+                                                    : "Touch ID required after \(touchIDTimeout.displayName.lowercased()) of inactivity")
+                                                    .font(.system(size: 10))
+                                            }
+                                            .foregroundColor(.white.opacity(0.35))
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                            .padding(.leading, 28)
+                                        }
+                                    }
+                                }
+                            }
+
                             // About card
                             glassCard {
                                 VStack(spacing: 12) {
@@ -269,11 +339,12 @@ struct SettingsView: View {
                 .padding(.bottom, 20)
             }
         }
-        .frame(width: 400, height: 440)
+        .frame(width: 400, height: 540)
         .preferredColorScheme(.dark)
         .onAppear {
             loadData()
             loadShortcut()
+            loadTouchIDSettings()
         }
         .onDisappear {
             stopRecording()
@@ -387,6 +458,15 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: - Touch ID
+
+    private func loadTouchIDSettings() {
+        touchIDAvailable = TouchIDService.shared.isAvailable
+        let settings = TouchIDSettings.load()
+        touchIDEnabled = settings.isEnabled
+        touchIDTimeout = settings.timeoutPreset
+    }
+
     // MARK: - Save
 
     private func save() {
@@ -405,6 +485,18 @@ struct SettingsView: View {
             shortcutModifiers: shortcutModifiers
         )
         config.save()
+
+        // Save Touch ID settings
+        let touchIDSettings = TouchIDSettings(
+            isEnabled: touchIDEnabled && touchIDAvailable,
+            timeoutPreset: touchIDTimeout
+        )
+        touchIDSettings.save()
+
+        // Clear auth timestamp when Touch ID is disabled
+        if !touchIDEnabled {
+            TouchIDService.shared.clearAuth()
+        }
 
         GlobalShortcutManager.shared.updateShortcut(
             keyCode: shortcutKeyCode,
