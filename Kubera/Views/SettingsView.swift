@@ -20,6 +20,24 @@ struct SettingsView: View {
         guard selectedProject != nil else { return false }
         return allEnvironmentsSelected || selectedEnvironment != nil
     }
+
+    /// Envs available to the "Default for Add" picker. In all-projects mode
+    /// we union envs across every project (de-dup by slug); otherwise we use
+    /// the selected project's envs.
+    private var defaultAddEnvOptions: [InfisicalEnvironment] {
+        if allProjectsSelected {
+            var seen: Set<String> = []
+            var out: [InfisicalEnvironment] = []
+            for project in projects {
+                for env in project.environments where !seen.contains(env.slug) {
+                    seen.insert(env.slug)
+                    out.append(env)
+                }
+            }
+            return out.sorted { $0.name < $1.name }
+        }
+        return selectedProject?.environments ?? []
+    }
     @State private var secretPath: String = "/"
     @State private var isLoading = true
     @State private var statusMessage: String?
@@ -88,6 +106,11 @@ struct SettingsView: View {
                                                 selectedProject = nil
                                                 selectedEnvironment = nil
                                                 allEnvironmentsSelected = true
+                                                // Pre-populate defaultAddEnvSlug from the union if not already valid.
+                                                if defaultAddEnvSlug == nil
+                                                    || !defaultAddEnvOptions.contains(where: { $0.slug == defaultAddEnvSlug }) {
+                                                    defaultAddEnvSlug = defaultAddEnvOptions.first?.slug
+                                                }
                                             } label: {
                                                 HStack {
                                                     Text("All Projects")
@@ -174,18 +197,11 @@ struct SettingsView: View {
                                         icon: "plus.square.on.square",
                                         label: "Default for Add"
                                     ) {
-                                        // In all-projects mode aggregate envs across every project so the
-                                        // user can still pick a default even when no single project is selected.
-                                        let envs: [InfisicalEnvironment] = allProjectsSelected
-                                            ? Array(
-                                                Dictionary(grouping: projects.flatMap { $0.environments }, by: { $0.slug })
-                                                    .compactMapValues { $0.first }
-                                                    .values
-                                            ).sorted { $0.name < $1.name }
-                                            : (selectedProject?.environments ?? [])
-                                        if !envs.isEmpty {
+                                        if defaultAddEnvOptions.isEmpty {
+                                            dropdownPill(text: "—").opacity(0.4)
+                                        } else {
                                             Menu {
-                                                ForEach(envs) { env in
+                                                ForEach(defaultAddEnvOptions) { env in
                                                     Button {
                                                         defaultAddEnvSlug = env.slug
                                                     } label: {
@@ -198,8 +214,8 @@ struct SettingsView: View {
                                                     }
                                                 }
                                             } label: {
-                                                dropdownPill(text: envs.first(where: { $0.slug == defaultAddEnvSlug })?.name
-                                                             ?? envs.first?.name ?? "Select...")
+                                                dropdownPill(text: defaultAddEnvOptions.first(where: { $0.slug == defaultAddEnvSlug })?.name
+                                                             ?? defaultAddEnvOptions.first?.name ?? "Select...")
                                             }
                                             .buttonStyle(.plain)
                                             .menuIndicator(.hidden)
