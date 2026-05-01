@@ -70,12 +70,19 @@ struct SettingsView: View {
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // Header — relies on the standard window close button for dismiss
-                HStack {
+                // Header — relies on the standard window close button for dismiss.
+                // Version + GitHub + handle chips live here so the right column
+                // doesn't need an About card eating vertical space.
+                HStack(spacing: 10) {
                     Text("Settings")
                         .font(.system(size: 16, weight: .bold))
                         .foregroundColor(.white.opacity(0.92))
                     Spacer()
+                    Text("v1.4.0")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.white.opacity(0.4))
+                    headerLink(text: "Star on GitHub", icon: "star.fill", url: "https://github.com/ptmaroct/kubera")
+                    headerLink(text: "@waahbete", icon: nil, url: "https://x.com/waahbete")
                 }
                 .padding(.horizontal, 24)
                 .padding(.top, 20)
@@ -437,69 +444,6 @@ struct SettingsView: View {
                                 }
                             }
 
-                            // About card
-                            glassCard {
-                                VStack(spacing: 12) {
-                                    settingsRow(
-                                        icon: "info.circle.fill",
-                                        label: "Version"
-                                    ) {
-                                        Text("1.4.0")
-                                            .font(.system(size: 12))
-                                            .foregroundColor(.white.opacity(0.4))
-                                    }
-
-                                    Divider().opacity(0.2)
-
-                                    settingsRow(
-                                        icon: "star.fill",
-                                        label: "Enjoying Kubera?"
-                                    ) {
-                                        Button {
-                                            if let url = URL(string: "https://github.com/ptmaroct/kubera") {
-                                                NSWorkspace.shared.open(url)
-                                            }
-                                        } label: {
-                                            HStack(spacing: 4) {
-                                                Text("Star on GitHub")
-                                                    .font(.system(size: 12, weight: .medium))
-                                                    .foregroundColor(Color.vault.accent)
-                                                Image(systemName: "arrow.up.right")
-                                                    .font(.system(size: 8, weight: .semibold))
-                                                    .foregroundColor(Color.vault.accent.opacity(0.6))
-                                            }
-                                        }
-                                        .buttonStyle(.plain)
-                                    }
-
-                                    Divider().opacity(0.2)
-
-                                    HStack(spacing: 4) {
-                                        Text("Made by Anuj Sharma")
-                                            .font(.system(size: 11))
-                                            .foregroundColor(.white.opacity(0.5))
-                                        Text("·")
-                                            .font(.system(size: 11))
-                                            .foregroundColor(.white.opacity(0.3))
-                                        Button {
-                                            if let url = URL(string: "https://x.com/waahbete") {
-                                                NSWorkspace.shared.open(url)
-                                            }
-                                        } label: {
-                                            HStack(spacing: 3) {
-                                                Text("@waahbete")
-                                                    .font(.system(size: 11, weight: .medium))
-                                                    .foregroundColor(Color.vault.accent)
-                                                Image(systemName: "arrow.up.right")
-                                                    .font(.system(size: 8, weight: .semibold))
-                                                    .foregroundColor(Color.vault.accent.opacity(0.6))
-                                            }
-                                        }
-                                        .buttonStyle(.plain)
-                                    }
-                                    .frame(maxWidth: .infinity, alignment: .center)
-                                }
-                            }
                             Spacer(minLength: 0)
                         }
                     }
@@ -535,7 +479,7 @@ struct SettingsView: View {
                 .padding(.bottom, 20)
             }
         }
-        .frame(width: 820, height: 640)
+        .frame(width: 820, height: 540)
         .preferredColorScheme(.dark)
         .onAppear {
             loadData()
@@ -571,6 +515,42 @@ struct SettingsView: View {
     }
 
     // MARK: - Settings Row
+
+    /// Compact link chip used in the Settings header. Replaces the old "About"
+    /// card (Version / Enjoying Kubera? / @waahbete) so the right column can
+    /// breathe without padding.
+    @ViewBuilder
+    private func headerLink(text: String, icon: String?, url: String) -> some View {
+        Button {
+            if let target = URL(string: url) {
+                NSWorkspace.shared.open(target)
+            }
+        } label: {
+            HStack(spacing: 4) {
+                if let icon {
+                    Image(systemName: icon)
+                        .font(.system(size: 9, weight: .semibold))
+                }
+                Text(text)
+                    .font(.system(size: 11, weight: .medium))
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 8, weight: .semibold))
+                    .opacity(0.6)
+            }
+            .foregroundColor(Color.vault.accent)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color.vault.accent.opacity(0.10))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(Color.vault.accent.opacity(0.18), lineWidth: 1)
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+    }
 
     /// Pill-shaped trigger label for Menus, used by every dropdown in this view
     /// so the project / env / default-add / Touch-ID timeout selectors all read
