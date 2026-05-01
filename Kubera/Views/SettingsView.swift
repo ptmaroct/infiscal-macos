@@ -31,6 +31,9 @@ struct SettingsView: View {
     @State private var expiryNotify1Day: Bool = true
     @State private var expiryNotifyAtExpiry: Bool = true
 
+    // Dock visibility state
+    @State private var showInDockWhenWindowsOpen: Bool = DockVisibilityPreference.enabled
+
     var body: some View {
         ZStack {
             // Glass background
@@ -351,6 +354,31 @@ struct SettingsView: View {
                                 }
                             }
 
+                            // App behavior card
+                            glassCard {
+                                VStack(spacing: 12) {
+                                    settingsRow(
+                                        icon: "dock.rectangle",
+                                        label: "Show in Dock"
+                                    ) {
+                                        Toggle("", isOn: $showInDockWhenWindowsOpen)
+                                            .toggleStyle(.switch)
+                                            .labelsHidden()
+                                            .controlSize(.small)
+                                    }
+
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "info.circle")
+                                            .font(.system(size: 9))
+                                        Text("Show Kubera in the Dock while Settings or Onboarding is open. Off keeps it menubar-only.")
+                                            .font(.system(size: 10))
+                                    }
+                                    .foregroundColor(.white.opacity(0.35))
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.leading, 28)
+                                }
+                            }
+
                             // About card
                             glassCard {
                                 VStack(spacing: 12) {
@@ -366,8 +394,8 @@ struct SettingsView: View {
                                     Divider().opacity(0.2)
 
                                     settingsRow(
-                                        icon: "link",
-                                        label: "Source"
+                                        icon: "star.fill",
+                                        label: "Enjoying Kubera?"
                                     ) {
                                         Button {
                                             if let url = URL(string: "https://github.com/ptmaroct/kubera") {
@@ -375,8 +403,8 @@ struct SettingsView: View {
                                             }
                                         } label: {
                                             HStack(spacing: 4) {
-                                                Text("GitHub")
-                                                    .font(.system(size: 12))
+                                                Text("Star on GitHub")
+                                                    .font(.system(size: 12, weight: .medium))
                                                     .foregroundColor(Color.vault.accent)
                                                 Image(systemName: "arrow.up.right")
                                                     .font(.system(size: 8, weight: .semibold))
@@ -448,7 +476,7 @@ struct SettingsView: View {
                 .padding(.bottom, 20)
             }
         }
-        .frame(width: 400, height: 540)
+        .frame(width: 520, height: 760)
         .preferredColorScheme(.dark)
         .onAppear {
             loadData()
@@ -460,6 +488,10 @@ struct SettingsView: View {
         .onChange(of: expiryNotify7Days) { _ in saveExpiryNotificationSettings() }
         .onChange(of: expiryNotify1Day) { _ in saveExpiryNotificationSettings() }
         .onChange(of: expiryNotifyAtExpiry) { _ in saveExpiryNotificationSettings() }
+        .onChange(of: showInDockWhenWindowsOpen) { newValue in
+            DockVisibilityPreference.enabled = newValue
+            NotificationCenter.default.post(name: AppDelegate.dockVisibilityChangedNotification, object: nil)
+        }
         .onDisappear {
             stopRecording()
         }
