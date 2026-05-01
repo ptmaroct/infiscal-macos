@@ -44,21 +44,12 @@ struct SettingsView: View {
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // Header
+                // Header — relies on the standard window close button for dismiss
                 HStack {
                     Text("Settings")
                         .font(.system(size: 16, weight: .bold))
                         .foregroundColor(.white.opacity(0.92))
                     Spacer()
-                    Button {
-                        stopRecording()
-                        onDismiss()
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 18))
-                            .foregroundColor(.white.opacity(0.3))
-                    }
-                    .buttonStyle(.plain)
                 }
                 .padding(.horizontal, 24)
                 .padding(.top, 20)
@@ -129,7 +120,12 @@ struct SettingsView: View {
                                         icon: "leaf.fill",
                                         label: "Environment"
                                     ) {
-                                        if let envs = selectedProject?.environments, !envs.isEmpty {
+                                        if allProjectsSelected {
+                                            // All-projects mode forces all-envs.
+                                            // Render a non-interactive pill so the row doesn't go blank.
+                                            dropdownPill(text: "All Environments")
+                                                .opacity(0.6)
+                                        } else if let envs = selectedProject?.environments, !envs.isEmpty {
                                             Menu {
                                                 Button {
                                                     allEnvironmentsSelected = true
@@ -173,7 +169,16 @@ struct SettingsView: View {
                                         icon: "plus.square.on.square",
                                         label: "Default for Add"
                                     ) {
-                                        if let envs = selectedProject?.environments, !envs.isEmpty {
+                                        // In all-projects mode aggregate envs across every project so the
+                                        // user can still pick a default even when no single project is selected.
+                                        let envs: [InfisicalEnvironment] = allProjectsSelected
+                                            ? Array(
+                                                Dictionary(grouping: projects.flatMap { $0.environments }, by: { $0.slug })
+                                                    .compactMapValues { $0.first }
+                                                    .values
+                                            ).sorted { $0.name < $1.name }
+                                            : (selectedProject?.environments ?? [])
+                                        if !envs.isEmpty {
                                             Menu {
                                                 ForEach(envs) { env in
                                                     Button {
