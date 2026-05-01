@@ -386,7 +386,7 @@ struct SettingsView: View {
                                         icon: "info.circle.fill",
                                         label: "Version"
                                     ) {
-                                        Text("1.3.0")
+                                        Text("1.4.0")
                                             .font(.system(size: 12))
                                             .foregroundColor(.white.opacity(0.4))
                                     }
