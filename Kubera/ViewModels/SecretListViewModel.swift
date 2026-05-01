@@ -17,8 +17,10 @@ final class SecretListViewModel: ObservableObject {
     @Published var isDeleting: Bool = false
     @Published var copiedSecretId: String?
 
-    /// Snapshot of sort order at window open — doesn't re-sort on copy
-    @Published private var sortedKeyOrder: [String] = []
+    /// Snapshot of sort order at window open — doesn't re-sort on copy.
+    /// Use a compound identity because all-environment mode can contain the
+    /// same secret key in multiple environments.
+    @Published private var sortedSecretOrder: [String] = []
 
     init(appViewModel: AppViewModel) {
         self.appViewModel = appViewModel
@@ -27,22 +29,25 @@ final class SecretListViewModel: ObservableObject {
 
     /// Capture the current sort order so copies don't shuffle the list
     func snapshotOrder() {
-        sortedKeyOrder = appViewModel.sortedSecrets.map { $0.key }
+        sortedSecretOrder = appViewModel.sortedSecrets.map(\.stableListIdentity)
     }
 
     /// Secrets in stable order (snapshotted at window open), with new secrets appended
     private var stableSecrets: [SecretItem] {
-        let secretsByKey = Dictionary(uniqueKeysWithValues: appViewModel.secrets.map { ($0.key, $0) })
+        let secretsByIdentity = Dictionary(
+            appViewModel.secrets.map { ($0.stableListIdentity, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
         var result: [SecretItem] = []
         // First: secrets in snapshotted order
-        for key in sortedKeyOrder {
-            if let secret = secretsByKey[key] {
+        for identity in sortedSecretOrder {
+            if let secret = secretsByIdentity[identity] {
                 result.append(secret)
             }
         }
         // Then: any new secrets not in snapshot
-        let snapshotSet = Set(sortedKeyOrder)
-        for secret in appViewModel.secrets where !snapshotSet.contains(secret.key) {
+        let snapshotSet = Set(sortedSecretOrder)
+        for secret in appViewModel.secrets where !snapshotSet.contains(secret.stableListIdentity) {
             result.append(secret)
         }
         return result
@@ -129,5 +134,11 @@ final class SecretListViewModel: ObservableObject {
             deletingSecret = nil
         }
         return success
+    }
+}
+
+extension SecretItem {
+    var stableListIdentity: String {
+        "\(environment ?? AppConfiguration.defaultEnvironment):\(id):\(key)"
     }
 }

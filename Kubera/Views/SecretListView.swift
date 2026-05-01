@@ -165,7 +165,7 @@ struct SecretListView: View {
     private var secretList: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
-                ForEach(listVM.filteredSecrets) { secret in
+                ForEach(listVM.filteredSecrets, id: \.stableListIdentity) { secret in
                     SecretRow(
                         secret: secret,
                         isCopied: listVM.copiedSecretId == secret.id,
