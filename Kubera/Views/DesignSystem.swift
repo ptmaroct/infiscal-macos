@@ -83,6 +83,7 @@ struct VaultTextField: View {
                             .foregroundColor(isRevealed ? Color.vault.accent : Color.vault.textTertiary)
                     }
                     .buttonStyle(.plain)
+                    .padding(.leading, 10)
                 }
             }
             .padding(.horizontal, 12)

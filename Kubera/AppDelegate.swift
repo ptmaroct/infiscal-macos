@@ -99,13 +99,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSear
 
         menu.addItem(NSMenuItem.separator())
 
-        // View All Secrets
-        let viewAllItem = NSMenuItem(title: "View All Secrets...", action: #selector(openSecretList), keyEquivalent: "l")
+        // View All
+        let viewAllItem = NSMenuItem(title: "View All", action: #selector(openSecretList), keyEquivalent: "a")
         viewAllItem.target = self
         menu.addItem(viewAllItem)
 
-        // Add New Secret
-        let addItem = NSMenuItem(title: "Add New Secret...", action: #selector(openAddSecret), keyEquivalent: "n")
+        // New Secret
+        let addItem = NSMenuItem(title: "New Secret", action: #selector(openAddSecret), keyEquivalent: "n")
         addItem.target = self
         menu.addItem(addItem)
 
@@ -354,7 +354,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSear
             let view = SecretListView(viewModel: viewModel) { [weak self] in
                 self?.secretListWindow?.close()
             }
-            secretListWindow = makeStyledWindow(view: view, width: 660, height: 540)
+            secretListWindow = makeStyledWindow(
+                view: view,
+                width: SecretListView.windowWidth,
+                height: SecretListView.windowHeight
+            )
         }
         secretListWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -365,7 +369,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSear
             let view = AddSecretView(viewModel: viewModel) { [weak self] in
                 self?.addSecretWindow?.close()
             }
-            addSecretWindow = makeStyledWindow(view: view, width: 480, height: 540)
+            addSecretWindow = makeStyledWindow(view: view, width: 500, height: 700)
         }
         addSecretWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)

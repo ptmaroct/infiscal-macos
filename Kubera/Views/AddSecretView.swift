@@ -15,10 +15,13 @@ struct AddSecretView: View {
 
     var body: some View {
         ZStack {
-            WindowBackground()
+            VisualEffectBlur(material: .hudWindow, blendingMode: .behindWindow)
+                .ignoresSafeArea()
+            Color.vault.bg.opacity(0.72)
+                .ignoresSafeArea()
             formContent
         }
-        .frame(width: 480, height: 660)
+        .frame(width: 500, height: 700)
         .preferredColorScheme(.dark)
         .onAppear {
             Task { await addVM.loadInitialData() }
@@ -40,36 +43,34 @@ struct AddSecretView: View {
             }
             .padding(.horizontal, 28)
             .padding(.top, 24)
-            .padding(.bottom, 16)
+            .padding(.bottom, 14)
 
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 14) {
-                    contextRow
+            VStack(spacing: 12) {
+                contextRow
 
-                    Rectangle()
-                        .fill(Color.vault.border)
-                        .frame(height: 1)
-                        .padding(.vertical, 2)
+                Rectangle()
+                    .fill(Color.vault.border)
+                    .frame(height: 1)
+                    .padding(.vertical, 1)
 
-                    VaultTextField(label: "Secret Name", text: $addVM.key, isMonospaced: true, placeholder: "e.g. API_KEY")
-                    VaultTextField(label: "Secret Value", text: $addVM.value, isSecure: true, placeholder: "Enter value")
+                VaultTextField(label: "Secret Name", text: $addVM.key, isMonospaced: true, placeholder: "e.g. API_KEY")
+                VaultTextField(label: "Secret Value", text: $addVM.value, isSecure: true, placeholder: "Enter value")
 
-                    VaultTextEditor(
-                        label: "Comment",
-                        text: $addVM.comment,
-                        placeholder: "Optional description...",
-                        lineCount: 2
-                    )
+                VaultTextEditor(
+                    label: "Comment",
+                    text: $addVM.comment,
+                    placeholder: "Optional description...",
+                    lineCount: 2
+                )
 
-                    expirySection
+                expirySection
 
-                    serviceURLSection
+                serviceURLSection
 
-                    tagSection
-                }
-                .padding(.horizontal, 28)
-                .padding(.bottom, 14)
+                tagSection
             }
+            .padding(.horizontal, 28)
+            .padding(.bottom, 14)
 
             if let error = addVM.errorMessage {
                 HStack(spacing: 6) {
@@ -91,100 +92,181 @@ struct AddSecretView: View {
         }
     }
 
-    // MARK: - Context Row (Project left ← → Environment right)
+    // MARK: - Context
 
     private var contextRow: some View {
-        HStack(alignment: .top, spacing: 12) {
-            // Project
-            VStack(alignment: .leading, spacing: 4) {
-                Text("PROJECT")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundColor(Color.vault.textTertiary)
-                    .tracking(1.2)
+        formCard {
+            VStack(spacing: 12) {
+                HStack(alignment: .center, spacing: 12) {
+                    selectionRow(icon: "folder.fill", label: "Project") {
+                        projectPicker
+                    }
 
-                if addVM.isLoadingProjects {
-                    HStack(spacing: 6) {
-                        ProgressView().scaleEffect(0.5).frame(width: 10, height: 10)
-                        Text("Loading...")
-                            .font(.system(size: 11))
-                            .foregroundColor(Color.vault.textTertiary)
-                    }
-                } else {
-                    Menu {
-                        ForEach(addVM.projects) { project in
-                            Button {
-                                addVM.selectedProject = project
-                                addVM.onProjectSelected()
-                            } label: {
-                                HStack {
-                                    Text(project.name)
-                                    if addVM.selectedProject?.id == project.id {
-                                        Image(systemName: "checkmark")
-                                    }
-                                }
-                            }
-                        }
-                    } label: {
-                        HStack(spacing: 5) {
-                            Image(systemName: "folder.fill")
-                                .font(.system(size: 10))
-                                .foregroundColor(Color.vault.accent)
-                            Text(addVM.selectedProject?.name ?? "Select...")
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundColor(Color.vault.text)
-                            Image(systemName: "chevron.up.chevron.down")
-                                .font(.system(size: 8))
-                                .foregroundColor(Color.vault.textTertiary)
+                    if !addVM.environments.isEmpty {
+                        Rectangle()
+                            .fill(Color.white.opacity(0.08))
+                            .frame(width: 1, height: 28)
+
+                        selectionRow(icon: "leaf.fill", label: "Environment") {
+                            Text(environmentSummary)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(Color.vault.textSecondary)
+                                .lineLimit(1)
                         }
                     }
-                    .menuStyle(.borderlessButton)
-                    .menuIndicator(.hidden)
-                    .fixedSize()
                 }
-            }
 
-            Spacer()
-
-            // Environment — segmented button group
-            if !addVM.environments.isEmpty {
-                VStack(alignment: .trailing, spacing: 4) {
-                    Text("ENVIRONMENT")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundColor(Color.vault.textTertiary)
-                        .tracking(1.2)
-
-                    HStack(spacing: 0) {
-                        ForEach(Array(addVM.environments.enumerated()), id: \.element.id) { index, env in
-                            let isSelected = addVM.selectedEnvironmentIds.contains(env.id)
-                            Button {
-                                withAnimation(.spring(response: 0.25)) {
-                                    addVM.toggleEnvironment(env)
-                                }
-                            } label: {
-                                Text(env.name)
-                                    .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
-                                    .foregroundColor(isSelected ? Color.vault.bg : Color.vault.textSecondary)
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 6)
-                                    .background(isSelected ? Color.vault.accent : Color.vault.surface)
-                            }
-                            .buttonStyle(.plain)
-
-                            if index < addVM.environments.count - 1 {
-                                Rectangle()
-                                    .fill(Color.vault.border)
-                                    .frame(width: 1)
-                            }
-                        }
-                    }
-                    .cornerRadius(6)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(Color.vault.border, lineWidth: 1)
-                    )
+                if !addVM.environments.isEmpty {
+                    environmentChips
                 }
             }
         }
+    }
+
+    private var projectPicker: some View {
+        Group {
+            if addVM.isLoadingProjects && addVM.projects.isEmpty {
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .scaleEffect(0.55)
+                        .frame(width: 12, height: 12)
+                    Text("Loading...")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(Color.vault.textSecondary)
+                }
+            } else if addVM.projects.isEmpty {
+                dropdownPill(text: "No Projects", isEnabled: false)
+            } else {
+                Menu {
+                    ForEach(addVM.projects) { project in
+                        Button {
+                            addVM.selectedProject = project
+                            addVM.onProjectSelected()
+                        } label: {
+                            HStack {
+                                Text(project.name)
+                                if addVM.selectedProject?.id == project.id {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    dropdownPill(text: addVM.selectedProject?.name ?? "Select Project")
+                }
+                .buttonStyle(.plain)
+                .menuIndicator(.hidden)
+                .fixedSize()
+            }
+        }
+    }
+
+    private var environmentSummary: String {
+        let count = addVM.selectedEnvironmentIds.count
+        if count == 0 { return "Select at least one" }
+        if count == addVM.environments.count { return "All environments" }
+        if count == 1 { return addVM.selectedEnvironments.first?.name ?? "1 selected" }
+        return "\(count) selected"
+    }
+
+    private var environmentChips: some View {
+        FlowLayout(spacing: 6, rowSpacing: 6) {
+            ForEach(addVM.environments) { env in
+                environmentChip(env)
+            }
+        }
+        .padding(.vertical, 1)
+    }
+
+    private func environmentChip(_ env: InfisicalEnvironment) -> some View {
+        let isSelected = addVM.selectedEnvironmentIds.contains(env.id)
+        return Button {
+            withAnimation(.spring(response: 0.22, dampingFraction: 0.85)) {
+                addVM.toggleEnvironment(env)
+            }
+        } label: {
+            HStack(spacing: 5) {
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 9, weight: .bold))
+                }
+                Text(env.name)
+                    .font(.system(size: 11, weight: isSelected ? .semibold : .medium))
+                    .lineLimit(1)
+            }
+            .foregroundColor(isSelected ? Color.vault.bg : Color.vault.textSecondary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(isSelected ? Color.vault.accent : Color.white.opacity(0.07))
+            .cornerRadius(6)
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(isSelected ? Color.vault.accent : Color.white.opacity(0.10), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func formCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        content()
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .padding(12)
+            .background(Color.vault.surface.opacity(0.72))
+            .cornerRadius(10)
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            )
+    }
+
+    @ViewBuilder
+    private func selectionRow<Content: View>(icon: String, label: String, @ViewBuilder trailing: () -> Content) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 12))
+                .foregroundColor(Color.vault.accent)
+                .frame(width: 18)
+
+            Text(label)
+                .font(.system(size: 13))
+                .foregroundColor(Color.vault.textSecondary)
+                .lineLimit(1)
+
+            Spacer(minLength: 12)
+
+            trailing()
+                .layoutPriority(1)
+        }
+        .frame(minHeight: 28)
+    }
+
+    @ViewBuilder
+    private func dropdownPill(text: String, isEnabled: Bool = true) -> some View {
+        HStack(spacing: 6) {
+            Text(text)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(isEnabled ? Color.vault.text : Color.vault.textTertiary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(minWidth: 130, maxWidth: 230, alignment: .trailing)
+
+            if isEnabled {
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundColor(Color.vault.accent.opacity(0.85))
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(Color.white.opacity(0.07))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                )
+        )
     }
 
     // MARK: - Expiry & Service URL
@@ -320,46 +402,43 @@ struct AddSecretView: View {
                         .foregroundColor(Color.vault.textTertiary)
                 }
             } else {
-                // Single row: existing tags + pending tags + add button
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        // Existing API tags — click to toggle
-                        ForEach(addVM.tags) { tag in
-                            tagChip(tag)
-                        }
+                FlowLayout(spacing: 6, rowSpacing: 6) {
+                    // Existing API tags — click to toggle
+                    ForEach(addVM.tags) { tag in
+                        tagChip(tag)
+                    }
 
-                        // Pending new tags — shown with × to remove
-                        ForEach(addVM.pendingTagNames, id: \.self) { name in
-                            pendingChip(name)
-                        }
+                    // Pending new tags — shown with × to remove
+                    ForEach(addVM.pendingTagNames, id: \.self) { name in
+                        pendingChip(name)
+                    }
 
-                        // Inline add: either text field or + button
-                        if isAddingTag {
-                            addTagField
-                        } else {
-                            Button {
-                                withAnimation(.spring(response: 0.2)) {
-                                    isAddingTag = true
-                                }
-                            } label: {
-                                HStack(spacing: 3) {
-                                    Image(systemName: "plus")
-                                        .font(.system(size: 9, weight: .bold))
-                                    Text("Add")
-                                        .font(.system(size: 11, weight: .medium))
-                                }
-                                .foregroundColor(Color.vault.textSecondary)
-                                .padding(.horizontal, 9)
-                                .padding(.vertical, 5)
-                                .background(Color.vault.surface)
-                                .cornerRadius(5)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 5)
-                                        .stroke(Color.vault.border, lineWidth: 1)
-                                )
+                    // Inline add: either text field or + button
+                    if isAddingTag {
+                        addTagField
+                    } else {
+                        Button {
+                            withAnimation(.spring(response: 0.2)) {
+                                isAddingTag = true
                             }
-                            .buttonStyle(.plain)
+                        } label: {
+                            HStack(spacing: 3) {
+                                Image(systemName: "plus")
+                                    .font(.system(size: 9, weight: .bold))
+                                Text("Add")
+                                    .font(.system(size: 11, weight: .medium))
+                            }
+                            .foregroundColor(Color.vault.textSecondary)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 5)
+                            .background(Color.vault.surface)
+                            .cornerRadius(5)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 5)
+                                    .stroke(Color.vault.border, lineWidth: 1)
+                            )
                         }
+                        .buttonStyle(.plain)
                     }
                 }
             }
@@ -421,7 +500,7 @@ struct AddSecretView: View {
     private func tagChip(_ tag: InfisicalTag) -> some View {
         let isSelected = addVM.selectedTagIds.contains(tag.id)
         return Button {
-            _ = withAnimation(.spring(response: 0.2)) {
+            withAnimation(.spring(response: 0.2)) {
                 if isSelected {
                     addVM.selectedTagIds.remove(tag.id)
                 } else {
@@ -544,6 +623,59 @@ struct AddSecretView: View {
             .buttonStyle(.plain)
             .disabled(buttonState != .idle || !addVM.isValid)
             .opacity(!addVM.isValid && buttonState == .idle ? 0.4 : 1.0)
+        }
+    }
+}
+
+// MARK: - Flow Layout
+
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 6
+    var rowSpacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxWidth = proposal.width ?? .greatestFiniteMagnitude
+        var currentX: CGFloat = 0
+        var currentY: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        var usedWidth: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if currentX > 0, currentX + size.width > maxWidth {
+                currentY += rowHeight + rowSpacing
+                currentX = 0
+                rowHeight = 0
+            }
+
+            usedWidth = max(usedWidth, currentX + size.width)
+            rowHeight = max(rowHeight, size.height)
+            currentX += size.width + spacing
+        }
+
+        let proposedWidth = proposal.width ?? usedWidth
+        return CGSize(width: proposedWidth, height: currentY + rowHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var currentX = bounds.minX
+        var currentY = bounds.minY
+        var rowHeight: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if currentX > bounds.minX, currentX + size.width > bounds.maxX {
+                currentY += rowHeight + rowSpacing
+                currentX = bounds.minX
+                rowHeight = 0
+            }
+
+            subview.place(
+                at: CGPoint(x: currentX, y: currentY),
+                proposal: ProposedViewSize(size)
+            )
+            rowHeight = max(rowHeight, size.height)
+            currentX += size.width + spacing
         }
     }
 }

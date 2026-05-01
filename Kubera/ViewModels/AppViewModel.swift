@@ -78,7 +78,7 @@ final class AppViewModel: ObservableObject {
 
         // Resolve which (project, env) pairs to fetch. All-projects mode fans out
         // across every cached project; otherwise we use the single configured project.
-        var fetchTargets: [(projectId: String, envSlugs: [String])] = []
+        var fetchTargets: [(projectId: String, projectName: String?, envSlugs: [String])] = []
         if config.isAllProjects {
             let projects = ProjectCache.shared.projects.isEmpty
                 ? await ProjectCache.shared.fetchProjects()
@@ -86,7 +86,7 @@ final class AppViewModel: ObservableObject {
             for project in projects {
                 let slugs = project.environments.map { $0.slug }
                 guard !slugs.isEmpty else { continue }
-                fetchTargets.append((project.id, slugs))
+                fetchTargets.append((project.id, project.name, slugs))
             }
             if fetchTargets.isEmpty {
                 errorMessage = "No projects available"
@@ -101,9 +101,9 @@ final class AppViewModel: ObservableObject {
                 isLoading = false
                 return
             }
-            fetchTargets.append((config.projectId, envSlugs))
+            fetchTargets.append((config.projectId, config.projectName, envSlugs))
         } else {
-            fetchTargets.append((config.projectId, [config.environment]))
+            fetchTargets.append((config.projectId, config.projectName, [config.environment]))
         }
 
         do {
@@ -112,6 +112,7 @@ final class AppViewModel: ObservableObject {
                 let items = try await fetchSecrets(
                     envSlugs: target.envSlugs,
                     projectId: target.projectId,
+                    projectName: target.projectName,
                     secretPath: config.secretPath,
                     baseURL: config.baseURL
                 )
@@ -143,6 +144,7 @@ final class AppViewModel: ObservableObject {
     private func fetchSecrets(
         envSlugs: [String],
         projectId: String,
+        projectName: String?,
         secretPath: String,
         baseURL: String
     ) async throws -> [SecretItem] {
@@ -158,6 +160,8 @@ final class AppViewModel: ObservableObject {
                     let tagged = items.map { item -> SecretItem in
                         var copy = item
                         copy.environment = env
+                        copy.projectId = projectId
+                        copy.projectName = projectName
                         return copy
                     }
                     return (env, tagged)
@@ -216,11 +220,13 @@ final class AppViewModel: ObservableObject {
         newValue: String,
         newComment: String,
         newExpiry: Date?,
-        newServiceURL: String?
+        newServiceURL: String?,
+        newTagIds: [String]? = nil
     ) async -> Bool {
         guard let config = AppConfiguration.load() else { return false }
         // In all-envs mode the per-secret env is the source of truth.
         let env = secret.environment ?? config.environment
+        let projectId = secret.projectId ?? config.projectId
         guard env != AppConfiguration.allEnvironmentsSentinel else { return false }
 
         do {
@@ -228,11 +234,13 @@ final class AppViewModel: ObservableObject {
                 name: secret.key,
                 value: newValue,
                 comment: newComment,
+                tagIds: newTagIds ?? [],
+                tagsExplicit: newTagIds != nil,
                 expiryDate: newExpiry,
                 serviceURL: newServiceURL,
                 metadataExplicit: true,
                 environment: env,
-                projectId: config.projectId,
+                projectId: projectId,
                 secretPath: config.secretPath,
                 baseURL: config.baseURL
             )
@@ -248,18 +256,23 @@ final class AppViewModel: ObservableObject {
     func deleteSecret(_ secret: SecretItem) async -> Bool {
         guard let config = AppConfiguration.load() else { return false }
         let env = secret.environment ?? config.environment
+        let projectId = secret.projectId ?? config.projectId
         guard env != AppConfiguration.allEnvironmentsSentinel else { return false }
 
         do {
             try await InfisicalCLIService.deleteSecret(
                 name: secret.key,
                 environment: env,
-                projectId: config.projectId,
+                projectId: projectId,
                 secretPath: config.secretPath,
                 baseURL: config.baseURL
             )
             // In all-envs mode keep entries from other envs intact.
-            secrets.removeAll { $0.key == secret.key && ($0.environment ?? env) == env }
+            secrets.removeAll {
+                $0.key == secret.key
+                    && ($0.environment ?? env) == env
+                    && ($0.projectId ?? projectId) == projectId
+            }
             cacheSecrets(secrets)
             return true
         } catch {
