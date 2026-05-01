@@ -547,7 +547,7 @@ struct SettingsView: View {
                 inlineLink("Infisical", url: "https://infisical.com")
             }
             HStack(spacing: 4) {
-                Text("v1.5.0")
+                Text("v1.5.1")
                     .foregroundColor(.white.opacity(0.3))
                 Text("·")
                     .foregroundColor(.white.opacity(0.2))
