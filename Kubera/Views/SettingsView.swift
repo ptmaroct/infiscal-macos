@@ -479,7 +479,7 @@ struct SettingsView: View {
                 .padding(.bottom, 20)
             }
         }
-        .frame(width: 820, height: 540)
+        .frame(width: 820, height: 430)
         .preferredColorScheme(.dark)
         .onAppear {
             loadData()

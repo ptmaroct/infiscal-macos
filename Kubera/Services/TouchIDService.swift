@@ -14,8 +14,12 @@ final class TouchIDService {
         return context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)
     }
 
-    /// Whether Touch ID is enabled in settings and the timeout has elapsed
+    /// Whether Touch ID is enabled in settings AND the device actually supports
+    /// it AND the timeout has elapsed. Hardware check first so a user who
+    /// enables Touch ID on one Mac and migrates to a Mac without biometrics
+    /// doesn't get locked out.
     var requiresAuthentication: Bool {
+        guard isAvailable else { return false }
         let settings = TouchIDSettings.load()
         guard settings.isEnabled else { return false }
 
@@ -30,8 +34,10 @@ final class TouchIDService {
         return elapsed >= timeout
     }
 
-    /// Authenticate with Touch ID. Returns true on success.
+    /// Authenticate with Touch ID. Returns true on success, false if the
+    /// device has no biometric hardware or the user cancels.
     func authenticate() async -> Bool {
+        guard isAvailable else { return false }
         let context = LAContext()
         context.localizedFallbackTitle = "Use Password"
 
