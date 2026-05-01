@@ -114,28 +114,11 @@ struct SettingsView: View {
                                                 }
                                             }
                                         } label: {
-                                            HStack(spacing: 6) {
-                                                Text(allProjectsSelected
-                                                     ? "All Projects"
-                                                     : (selectedProject?.name ?? "Select..."))
-                                                    .font(.system(size: 13, weight: .medium))
-                                                    .foregroundColor(.white.opacity(0.95))
-                                                Image(systemName: "chevron.up.chevron.down")
-                                                    .font(.system(size: 9, weight: .semibold))
-                                                    .foregroundColor(Color.vault.accent.opacity(0.8))
-                                            }
-                                            .padding(.horizontal, 10)
-                                            .padding(.vertical, 5)
-                                            .background(
-                                                RoundedRectangle(cornerRadius: 6)
-                                                    .fill(Color.white.opacity(0.05))
-                                                    .overlay(
-                                                        RoundedRectangle(cornerRadius: 6)
-                                                            .stroke(Color.white.opacity(0.08), lineWidth: 1)
-                                                    )
-                                            )
+                                            dropdownPill(text: allProjectsSelected
+                                                         ? "All Projects"
+                                                         : (selectedProject?.name ?? "Select..."))
                                         }
-                                        .menuStyle(.borderlessButton)
+                                        .buttonStyle(.plain)
                                         .menuIndicator(.hidden)
                                         .fixedSize()
                                     }
@@ -174,18 +157,11 @@ struct SettingsView: View {
                                                     }
                                                 }
                                             } label: {
-                                                HStack(spacing: 4) {
-                                                    Text(allEnvironmentsSelected
-                                                         ? "All Environments"
-                                                         : (selectedEnvironment?.name ?? "Select..."))
-                                                        .font(.system(size: 13))
-                                                        .foregroundColor(.white.opacity(0.85))
-                                                    Image(systemName: "chevron.up.chevron.down")
-                                                        .font(.system(size: 8))
-                                                        .foregroundColor(.white.opacity(0.4))
-                                                }
+                                                dropdownPill(text: allEnvironmentsSelected
+                                                             ? "All Environments"
+                                                             : (selectedEnvironment?.name ?? "Select..."))
                                             }
-                                            .menuStyle(.borderlessButton)
+                                            .buttonStyle(.plain)
                                             .menuIndicator(.hidden)
                                             .fixedSize()
                                         }
@@ -212,17 +188,10 @@ struct SettingsView: View {
                                                     }
                                                 }
                                             } label: {
-                                                HStack(spacing: 4) {
-                                                    Text(envs.first(where: { $0.slug == defaultAddEnvSlug })?.name
-                                                         ?? envs.first?.name ?? "Select...")
-                                                        .font(.system(size: 13))
-                                                        .foregroundColor(.white.opacity(0.85))
-                                                    Image(systemName: "chevron.up.chevron.down")
-                                                        .font(.system(size: 8))
-                                                        .foregroundColor(.white.opacity(0.4))
-                                                }
+                                                dropdownPill(text: envs.first(where: { $0.slug == defaultAddEnvSlug })?.name
+                                                             ?? envs.first?.name ?? "Select...")
                                             }
-                                            .menuStyle(.borderlessButton)
+                                            .buttonStyle(.plain)
                                             .menuIndicator(.hidden)
                                             .fixedSize()
                                         }
@@ -332,16 +301,9 @@ struct SettingsView: View {
                                                         }
                                                     }
                                                 } label: {
-                                                    HStack(spacing: 4) {
-                                                        Text(touchIDTimeout.displayName)
-                                                            .font(.system(size: 13))
-                                                            .foregroundColor(.white.opacity(0.85))
-                                                        Image(systemName: "chevron.up.chevron.down")
-                                                            .font(.system(size: 8))
-                                                            .foregroundColor(.white.opacity(0.4))
-                                                    }
+                                                    dropdownPill(text: touchIDTimeout.displayName)
                                                 }
-                                                .menuStyle(.borderlessButton)
+                                                .buttonStyle(.plain)
                                                 .menuIndicator(.hidden)
                                                 .fixedSize()
                                             }
@@ -583,6 +545,31 @@ struct SettingsView: View {
     }
 
     // MARK: - Settings Row
+
+    /// Pill-shaped trigger label for Menus, used by every dropdown in this view
+    /// so the project / env / default-add / Touch-ID timeout selectors all read
+    /// as one consistent control.
+    @ViewBuilder
+    private func dropdownPill(text: String) -> some View {
+        HStack(spacing: 6) {
+            Text(text)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(.white.opacity(0.95))
+            Image(systemName: "chevron.up.chevron.down")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundColor(Color.vault.accent.opacity(0.85))
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(Color.white.opacity(0.07))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                )
+        )
+    }
 
     @ViewBuilder
     private func settingsRow<Content: View>(icon: String, label: String, @ViewBuilder trailing: () -> Content) -> some View {
