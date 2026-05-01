@@ -7,7 +7,7 @@ struct Kubera: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "kubera",
         abstract: "Manage Infisical secrets configured for Kubera from the command line.",
-        version: "1.4.0",
+        version: "1.5.0",
         subcommands: [
             Status.self,
             Login.self,

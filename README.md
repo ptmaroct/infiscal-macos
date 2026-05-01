@@ -13,7 +13,7 @@ A native macOS menubar app for quickly searching and managing secrets via the [I
 <p align="center">
   <img src="assets/menubar.png" width="280" alt="Menubar dropdown" />
   &nbsp;&nbsp;
-  <img src="assets/add-secret.png" width="280" alt="Add secret" />
+  <img src="assets/vault-locked.png" width="280" alt="Vault locked — Touch ID unlock" />
   &nbsp;&nbsp;
   <img src="assets/settings.png" width="280" alt="Settings" />
 </p>

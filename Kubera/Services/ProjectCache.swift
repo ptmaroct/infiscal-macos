@@ -9,7 +9,7 @@ final class ProjectCache {
 
     private(set) var projects: [InfisicalProject] = []
     private(set) var lastProjectsFetchedAt: Date?
-    private var isFetchingProjects = false
+    private var projectsFetchTask: Task<[InfisicalProject]?, Never>?
 
     /// Tags cached per project ID
     private var tagsCache: [String: [InfisicalTag]] = [:]
@@ -34,19 +34,30 @@ final class ProjectCache {
 
     @discardableResult
     func fetchProjects() async -> [InfisicalProject] {
-        guard !isFetchingProjects else { return projects }
-        isFetchingProjects = true
-        defer { isFetchingProjects = false }
+        if let projectsFetchTask {
+            if let fetched = await projectsFetchTask.value {
+                projects = fetched
+                lastProjectsFetchedAt = Date()
+            }
+            return projects
+        }
 
-        do {
-            let orgs = try await InfisicalCLIService.fetchOrganizations()
-            guard let org = orgs.first else { return projects }
-            let fetched = try await InfisicalCLIService.fetchProjects(orgId: org.id)
+        let task = Task.detached { () -> [InfisicalProject]? in
+            do {
+                let orgs = try await InfisicalCLIService.fetchOrganizations()
+                guard let org = orgs.first else { return nil }
+                return try await InfisicalCLIService.fetchProjects(orgId: org.id)
+            } catch {
+                return nil
+            }
+        }
+        projectsFetchTask = task
+
+        if let fetched = await task.value {
             projects = fetched
             lastProjectsFetchedAt = Date()
-        } catch {
-            // Keep stale data on failure
         }
+        projectsFetchTask = nil
         return projects
     }
 

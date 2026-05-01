@@ -3,6 +3,9 @@ import KuberaCore
 import Carbon
 
 struct SettingsView: View {
+    static let windowWidth: CGFloat = 760
+    static let windowHeight: CGFloat = 500
+
     @ObservedObject var viewModel: AppViewModel
     let onDismiss: () -> Void
 
@@ -12,6 +15,11 @@ struct SettingsView: View {
     @State private var allEnvironmentsSelected: Bool = false
     @State private var allProjectsSelected: Bool = false
     @State private var defaultAddEnvSlug: String?
+
+    /// Debounce holder for auto-save. Each field change cancels the prior task
+    /// and schedules a fresh 1s-deadline persist; users get instant feedback
+    /// without us thrashing the config file on every keystroke.
+    @State private var pendingSave: Task<Void, Never>?
 
     /// Save button enabled when either: all-projects mode is on (env is locked
     /// to all-envs), or a single project + an env / all-envs is selected.
@@ -40,7 +48,6 @@ struct SettingsView: View {
     }
     @State private var secretPath: String = "/"
     @State private var isLoading = true
-    @State private var statusMessage: String?
 
     // Shortcut state
     @State private var shortcutKeyCode: UInt32 = AppConfiguration.defaultShortcutKeyCode
@@ -63,6 +70,12 @@ struct SettingsView: View {
     // Dock visibility state
     @State private var showInDockWhenWindowsOpen: Bool = DockVisibilityPreference.enabled
 
+    private let horizontalPadding: CGFloat = 22
+    private let columnSpacing: CGFloat = 14
+    private var columnWidth: CGFloat {
+        (Self.windowWidth - (horizontalPadding * 2) - columnSpacing) / 2
+    }
+
     var body: some View {
         ZStack {
             // Glass background
@@ -71,18 +84,11 @@ struct SettingsView: View {
 
             VStack(spacing: 0) {
                 // Header — relies on the standard window close button for dismiss.
-                // Version + GitHub + handle chips live here so the right column
-                // doesn't need an About card eating vertical space.
-                HStack(spacing: 10) {
+                HStack {
                     Text("Settings")
                         .font(.system(size: 16, weight: .bold))
                         .foregroundColor(.white.opacity(0.92))
                     Spacer()
-                    Text("v1.4.0")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(.white.opacity(0.4))
-                    headerLink(text: "Star on GitHub", icon: "star.fill", url: "https://github.com/ptmaroct/kubera")
-                    headerLink(text: "@waahbete", icon: nil, url: "https://x.com/waahbete")
                 }
                 .padding(.horizontal, 24)
                 .padding(.top, 20)
@@ -98,7 +104,9 @@ struct SettingsView: View {
                         .padding(.top, 8)
                     Spacer()
                 } else {
-                    HStack(alignment: .top, spacing: 14) {
+                    // Compact two-column settings panel. Cards size to content
+                    // and notes wrap so sparse cards do not stretch unevenly.
+                    HStack(alignment: .top, spacing: columnSpacing) {
                         VStack(spacing: 14) {
                             // Project & Environment card
                             glassCard {
@@ -309,6 +317,7 @@ struct SettingsView: View {
                                         ) {
                                             Toggle("", isOn: $touchIDEnabled)
                                                 .toggleStyle(.switch)
+                                                .labelsHidden()
                                                 .controlSize(.small)
                                                 .tint(Color.vault.accent)
                                         }
@@ -341,23 +350,15 @@ struct SettingsView: View {
                                                 .fixedSize()
                                             }
 
-                                            HStack(spacing: 4) {
-                                                Image(systemName: "info.circle")
-                                                    .font(.system(size: 9))
-                                                Text(touchIDTimeout == .immediately
-                                                    ? "Touch ID required every time you open the menu"
-                                                    : "Touch ID required \(touchIDTimeout.displayName.lowercased()) of inactivity")
-                                                    .font(.system(size: 10))
-                                            }
-                                            .foregroundColor(.white.opacity(0.35))
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-                                            .padding(.leading, 28)
+                                            settingNote(touchIDTimeout == .immediately
+                                                ? "Touch ID required every time you open the menu"
+                                                : "Touch ID required \(touchIDTimeout.displayName.lowercased()) of inactivity")
                                         }
                                     }
                                 }
                             }
-                            Spacer(minLength: 0)
                         }
+                        .frame(width: columnWidth, alignment: .top)
 
                         VStack(spacing: 14) {
                             // Expiry reminders card
@@ -367,10 +368,11 @@ struct SettingsView: View {
                                         icon: "bell.badge",
                                         label: "Expiry Reminders"
                                     ) {
-                                        Toggle("", isOn: $expiryNotificationsEnabled)
-                                            .toggleStyle(.switch)
-                                            .controlSize(.small)
-                                            .tint(Color.vault.accent)
+                                            Toggle("", isOn: $expiryNotificationsEnabled)
+                                                .toggleStyle(.switch)
+                                                .labelsHidden()
+                                                .controlSize(.small)
+                                                .tint(Color.vault.accent)
                                     }
 
                                     if expiryNotificationsEnabled {
@@ -382,6 +384,7 @@ struct SettingsView: View {
                                         ) {
                                             Toggle("", isOn: $expiryNotify7Days)
                                                 .toggleStyle(.switch)
+                                                .labelsHidden()
                                                 .controlSize(.small)
                                                 .tint(Color.vault.accent)
                                         }
@@ -392,6 +395,7 @@ struct SettingsView: View {
                                         ) {
                                             Toggle("", isOn: $expiryNotify1Day)
                                                 .toggleStyle(.switch)
+                                                .labelsHidden()
                                                 .controlSize(.small)
                                                 .tint(Color.vault.accent)
                                         }
@@ -402,19 +406,12 @@ struct SettingsView: View {
                                         ) {
                                             Toggle("", isOn: $expiryNotifyAtExpiry)
                                                 .toggleStyle(.switch)
+                                                .labelsHidden()
                                                 .controlSize(.small)
                                                 .tint(Color.vault.accent)
                                         }
 
-                                        HStack(spacing: 4) {
-                                            Image(systemName: "info.circle")
-                                                .font(.system(size: 9))
-                                            Text("Local macOS notifications fire at 9am for secrets with an expiry date.")
-                                                .font(.system(size: 10))
-                                        }
-                                        .foregroundColor(.white.opacity(0.35))
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .padding(.leading, 28)
+                                        settingNote("Local macOS notifications fire at 9am for secrets with an expiry date.")
                                     }
                                 }
                             }
@@ -430,56 +427,26 @@ struct SettingsView: View {
                                             .toggleStyle(.switch)
                                             .labelsHidden()
                                             .controlSize(.small)
+                                            .tint(Color.vault.accent)
                                     }
 
-                                    HStack(spacing: 4) {
-                                        Image(systemName: "info.circle")
-                                            .font(.system(size: 9))
-                                        Text("Show Kubera in the Dock while Settings or Onboarding is open. Off keeps it menubar-only.")
-                                            .font(.system(size: 10))
-                                    }
-                                    .foregroundColor(.white.opacity(0.35))
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .padding(.leading, 28)
+                                    settingNote("Show Kubera in the Dock while Settings or Onboarding is open. Off keeps it menubar-only.")
                                 }
                             }
-
-                            Spacer(minLength: 0)
                         }
+                        .frame(width: columnWidth, alignment: .top)
                     }
-                    .padding(.horizontal, 20)
+                    .padding(.horizontal, horizontalPadding)
 
-                    Spacer(minLength: 8)
-                }
+                    creditsFooter()
+                        .padding(.horizontal, horizontalPadding)
+                        .padding(.top, 14)
+                        .padding(.bottom, 16)
 
-                if let msg = statusMessage {
-                    Text(msg)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(msg.contains("Saved") ? Color.vault.success : Color.vault.error)
-                        .padding(.bottom, 4)
                 }
-
-                // Save button
-                Button {
-                    stopRecording()
-                    save()
-                } label: {
-                    Text("Save")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background(Color.vault.accent)
-                        .cornerRadius(10)
-                }
-                .buttonStyle(.plain)
-                .disabled(!isSaveable)
-                .opacity(isSaveable ? 1 : 0.4)
-                .padding(.horizontal, 24)
-                .padding(.bottom, 20)
             }
         }
-        .frame(width: 820, height: 430)
+        .frame(width: Self.windowWidth, height: Self.windowHeight)
         .preferredColorScheme(.dark)
         .onAppear {
             loadData()
@@ -495,8 +462,37 @@ struct SettingsView: View {
             DockVisibilityPreference.enabled = newValue
             NotificationCenter.default.post(name: AppDelegate.dockVisibilityChangedNotification, object: nil)
         }
+        // Auto-save Project / Environment / Default-for-Add / Path / Shortcut
+        // 1s after the last change. Touch ID + Expiry + Dock toggles already
+        // persist immediately via their own onChange handlers above.
+        .onChange(of: selectedProject) { _ in scheduleSave() }
+        .onChange(of: selectedEnvironment) { _ in scheduleSave() }
+        .onChange(of: allEnvironmentsSelected) { _ in scheduleSave() }
+        .onChange(of: allProjectsSelected) { _ in scheduleSave() }
+        .onChange(of: secretPath) { _ in scheduleSave() }
+        .onChange(of: defaultAddEnvSlug) { _ in scheduleSave() }
+        .onChange(of: shortcutKeyCode) { _ in scheduleSave() }
+        .onChange(of: shortcutModifiers) { _ in scheduleSave() }
+        .onChange(of: touchIDEnabled) { _ in scheduleSave() }
+        .onChange(of: touchIDTimeout) { _ in scheduleSave() }
         .onDisappear {
             stopRecording()
+            // Flush any pending debounce immediately so the user can't lose
+            // an in-flight change by closing the window.
+            pendingSave?.cancel()
+            if isSaveable { save() }
+        }
+    }
+
+    /// Cancel any in-flight debounce and re-arm a 1s deadline. Save runs on the
+    /// MainActor; cancellation is checked after the sleep to skip stale writes.
+    private func scheduleSave() {
+        guard !isLoading else { return }
+        pendingSave?.cancel()
+        pendingSave = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            guard !Task.isCancelled, isSaveable else { return }
+            save()
         }
     }
 
@@ -505,49 +501,90 @@ struct SettingsView: View {
     @ViewBuilder
     private func glassCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         content()
+            .frame(maxWidth: .infinity, alignment: .topLeading)
             .padding(16)
             .background(.ultraThinMaterial.opacity(0.6))
-            .cornerRadius(12)
+            .cornerRadius(10)
             .overlay(
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: 10)
                     .stroke(.white.opacity(0.06), lineWidth: 1)
             )
     }
 
     // MARK: - Settings Row
 
-    /// Compact link chip used in the Settings header. Replaces the old "About"
-    /// card (Version / Enjoying Kubera? / @waahbete) so the right column can
-    /// breathe without padding.
     @ViewBuilder
-    private func headerLink(text: String, icon: String?, url: String) -> some View {
+    private func settingNote(_ text: String) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Image(systemName: "info.circle")
+                .font(.system(size: 9))
+                .padding(.top, 1)
+            Text(text)
+                .font(.system(size: 10))
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .foregroundColor(.white.opacity(0.35))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.leading, 28)
+    }
+
+    /// Footer block that fills the right column. Two short lines: a personal
+    /// credit + Infisical thanks, then version + Star CTA. Centered, accent
+    /// colors on links so it reads warm rather than corporate.
+    @ViewBuilder
+    private func creditsFooter() -> some View {
+        VStack(spacing: 6) {
+            HStack(spacing: 4) {
+                Text("Crafted by")
+                    .foregroundColor(.white.opacity(0.4))
+                inlineLink("Anuj", url: "https://x.com/waahbete")
+                Text("·")
+                    .foregroundColor(.white.opacity(0.2))
+                Text("Powered by")
+                    .foregroundColor(.white.opacity(0.4))
+                inlineLink("Infisical", url: "https://infisical.com")
+            }
+            HStack(spacing: 4) {
+                Text("v1.5.0")
+                    .foregroundColor(.white.opacity(0.3))
+                Text("·")
+                    .foregroundColor(.white.opacity(0.2))
+                Button {
+                    if let url = URL(string: "https://github.com/ptmaroct/kubera") {
+                        NSWorkspace.shared.open(url)
+                    }
+                } label: {
+                    HStack(spacing: 3) {
+                        Image(systemName: "star.fill")
+                            .font(.system(size: 9))
+                        Text("Star on GitHub")
+                            .font(.system(size: 11, weight: .medium))
+                        Image(systemName: "arrow.up.right")
+                            .font(.system(size: 8, weight: .semibold))
+                            .opacity(0.6)
+                    }
+                    .foregroundColor(Color.vault.accent)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .font(.system(size: 11))
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.top, 6)
+    }
+
+    @ViewBuilder
+    private func inlineLink(_ text: String, url: String) -> some View {
         Button {
             if let target = URL(string: url) {
                 NSWorkspace.shared.open(target)
             }
         } label: {
-            HStack(spacing: 4) {
-                if let icon {
-                    Image(systemName: icon)
-                        .font(.system(size: 9, weight: .semibold))
-                }
-                Text(text)
-                    .font(.system(size: 11, weight: .medium))
-                Image(systemName: "arrow.up.right")
-                    .font(.system(size: 8, weight: .semibold))
-                    .opacity(0.6)
-            }
-            .foregroundColor(Color.vault.accent)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(Color.vault.accent.opacity(0.10))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(Color.vault.accent.opacity(0.18), lineWidth: 1)
-                    )
-            )
+            Text(text)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(Color.vault.accent)
         }
         .buttonStyle(.plain)
     }
@@ -561,6 +598,9 @@ struct SettingsView: View {
             Text(text)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundColor(.white.opacity(0.95))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(minWidth: 110, maxWidth: 180, alignment: .trailing)
             Image(systemName: "chevron.up.chevron.down")
                 .font(.system(size: 9, weight: .semibold))
                 .foregroundColor(Color.vault.accent.opacity(0.85))
@@ -588,11 +628,14 @@ struct SettingsView: View {
             Text(label)
                 .font(.system(size: 13))
                 .foregroundColor(.white.opacity(0.6))
+                .lineLimit(1)
 
-            Spacer()
+            Spacer(minLength: 12)
 
             trailing()
+                .layoutPriority(1)
         }
+        .frame(minHeight: 32)
     }
 
     // MARK: - Shortcut Recording
@@ -781,10 +824,6 @@ struct SettingsView: View {
         )
 
         viewModel.configurationSaved()
-        withAnimation { statusMessage = "Saved!" }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-            onDismiss()
-        }
     }
 }
 

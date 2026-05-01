@@ -384,7 +384,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSear
             let view = SettingsView(viewModel: viewModel) { [weak self] in
                 self?.settingsWindow?.close()
             }
-            settingsWindow = makeStyledWindow(view: view, width: 820, height: 430)
+            settingsWindow = makeStyledWindow(
+                view: view,
+                width: SettingsView.windowWidth,
+                height: SettingsView.windowHeight
+            )
         }
         settingsWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
