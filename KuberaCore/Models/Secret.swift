@@ -54,16 +54,20 @@ public struct SecretItem: Codable, Identifiable, Hashable {
     /// envs when "All Environments" mode is active.
     public var environment: String?
 
+    /// Project context stamped client-side after fetch. Infisical secret payloads
+    /// do not include this, but Kubera needs it when browsing all projects.
+    public var projectId: String?
+    public var projectName: String?
+
     enum CodingKeys: String, CodingKey {
         case id = "_id"
         case key = "secretKey"
         case value = "secretValue"
         case type
         case comment = "secretComment"
-        // `environment` round-trips through the local cache so badges render
-        // instantly on cold start. The Infisical API never sets it; the per-env
-        // fetcher stamps it client-side after the response decodes.
-        case version, tags, secretMetadata, createdAt, updatedAt, environment
+        // Client-stamped context round-trips through the local cache so badges
+        // and filters render instantly on cold start.
+        case version, tags, secretMetadata, createdAt, updatedAt, environment, projectId, projectName
     }
 
     public init(
@@ -77,7 +81,9 @@ public struct SecretItem: Codable, Identifiable, Hashable {
         secretMetadata: [SecretMetadataEntry]? = nil,
         createdAt: String? = nil,
         updatedAt: String? = nil,
-        environment: String? = nil
+        environment: String? = nil,
+        projectId: String? = nil,
+        projectName: String? = nil
     ) {
         self.id = id
         self.key = key
@@ -90,6 +96,8 @@ public struct SecretItem: Codable, Identifiable, Hashable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.environment = environment
+        self.projectId = projectId
+        self.projectName = projectName
     }
 
     // MARK: - Metadata helpers

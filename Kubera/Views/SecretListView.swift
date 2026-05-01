@@ -2,6 +2,9 @@ import SwiftUI
 import KuberaCore
 
 struct SecretListView: View {
+    static let windowWidth: CGFloat = 780
+    static let windowHeight: CGFloat = 620
+
     @ObservedObject var appViewModel: AppViewModel
     @StateObject private var listVM: SecretListViewModel
     let onClose: () -> Void
@@ -16,31 +19,33 @@ struct SecretListView: View {
 
     var body: some View {
         ZStack {
-            WindowBackground()
+            VisualEffectBlur(material: .hudWindow, blendingMode: .behindWindow)
+                .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // Header
                 headerSection
                     .padding(.horizontal, 24)
-                    .padding(.top, 24)
-                    .padding(.bottom, 16)
+                    .padding(.top, 22)
+                    .padding(.bottom, 14)
 
-                // Divider
-                Rectangle()
-                    .fill(Color.vault.border)
-                    .frame(height: 1)
+                filterPanel
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 14)
 
-                // Secret list
-                if appViewModel.isLoading && appViewModel.secrets.isEmpty {
-                    loadingState
-                } else if listVM.filteredSecrets.isEmpty {
-                    emptyState
-                } else {
-                    secretList
+                glassCard {
+                    if appViewModel.isLoading && appViewModel.secrets.isEmpty {
+                        loadingState
+                    } else if listVM.filteredSecrets.isEmpty {
+                        emptyState
+                    } else {
+                        secretList
+                    }
                 }
+                .padding(.horizontal, 24)
+                .padding(.bottom, 20)
             }
         }
-        .frame(minWidth: 620, minHeight: 400)
+        .frame(width: Self.windowWidth, height: Self.windowHeight)
         .sheet(item: $listVM.editingSecret) { secret in
             EditSecretSheet(
                 secret: secret,
@@ -75,89 +80,280 @@ struct SecretListView: View {
     // MARK: - Header
 
     private var headerSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("All Secrets")
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundColor(Color.vault.text)
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("All Secrets")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundColor(.white.opacity(0.92))
 
-                    if let config = AppConfiguration.load() {
-                        HStack(spacing: 6) {
-                            Text(config.projectName ?? "Project")
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundColor(Color.vault.textSecondary)
+                HStack(spacing: 6) {
+                    Text(summaryProjectText)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.white.opacity(0.48))
 
-                            Text("/")
-                                .font(.system(size: 11))
-                                .foregroundColor(Color.vault.textTertiary)
+                    Text("/")
+                        .font(.system(size: 11))
+                        .foregroundColor(.white.opacity(0.24))
 
-                            Text(config.environment)
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundColor(Color.vault.accent)
+                    Text(summaryEnvironmentText)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(Color.vault.accent)
 
-                            Text("·")
-                                .font(.system(size: 11))
-                                .foregroundColor(Color.vault.textTertiary)
+                    Text("·")
+                        .font(.system(size: 11))
+                        .foregroundColor(.white.opacity(0.24))
 
-                            Text("\(appViewModel.secrets.count) secrets")
-                                .font(.system(size: 11))
-                                .foregroundColor(Color.vault.textTertiary)
-                        }
+                    Text("\(listVM.filteredCount) of \(listVM.totalCount) secrets")
+                        .font(.system(size: 11))
+                        .foregroundColor(.white.opacity(0.36))
+                }
+            }
+
+            Spacer()
+
+            Button {
+                Task { await appViewModel.loadSecrets() }
+            } label: {
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(Color.vault.textSecondary)
+                    .frame(width: 32, height: 32)
+                    .background(Color.white.opacity(0.07))
+                    .cornerRadius(8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                    )
+            }
+            .buttonStyle(.plain)
+            .help("Refresh")
+        }
+    }
+
+    private var filterPanel: some View {
+        glassCard {
+            VStack(spacing: 12) {
+                searchField
+
+                Divider().opacity(0.2)
+
+                HStack(alignment: .top, spacing: 16) {
+                    filterRow(icon: "folder.fill", label: "Project") {
+                        projectFilterMenu
+                    }
+
+                    Divider().opacity(0.2)
+
+                    filterRow(icon: "leaf.fill", label: "Environment") {
+                        environmentTabs
                     }
                 }
 
-                Spacer()
+                if listVM.activeFilterCount > 0 || !listVM.searchText.isEmpty {
+                    Divider().opacity(0.2)
 
-                // Refresh button
+                    Button {
+                        listVM.clearFilters()
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 10))
+                            Text("Clear filters")
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .foregroundColor(.white.opacity(0.42))
+                    }
+                    .buttonStyle(.plain)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                }
+            }
+        }
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(Color.vault.textTertiary)
+
+            TextField("Filter by name, comment, or tag...", text: $listVM.searchText)
+                .font(.system(size: 13))
+                .foregroundColor(Color.vault.text)
+                .textFieldStyle(.plain)
+
+            if !listVM.searchText.isEmpty {
                 Button {
-                    Task { await appViewModel.loadSecrets() }
+                    listVM.searchText = ""
                 } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(Color.vault.textSecondary)
-                        .frame(width: 28, height: 28)
-                        .background(Color.vault.surface)
-                        .cornerRadius(6)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 6)
-                                .stroke(Color.vault.border, lineWidth: 1)
-                        )
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 12))
+                        .foregroundColor(Color.vault.textTertiary)
                 }
                 .buttonStyle(.plain)
             }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color.vault.bg.opacity(0.7))
+        .cornerRadius(8)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        )
+    }
 
-            // Search bar
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(Color.vault.textTertiary)
-
-                TextField("Filter by name, comment, or tag...", text: $listVM.searchText)
-                    .font(.system(size: 13))
-                    .foregroundColor(Color.vault.text)
-                    .textFieldStyle(.plain)
-
-                if !listVM.searchText.isEmpty {
-                    Button {
-                        listVM.searchText = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 12))
-                            .foregroundColor(Color.vault.textTertiary)
+    private var projectFilterMenu: some View {
+        Menu {
+            Button {
+                listVM.selectedProjectId = nil
+            } label: {
+                HStack {
+                    Text("All Projects")
+                    if listVM.selectedProjectId == nil {
+                        Image(systemName: "checkmark")
                     }
-                    .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(Color.vault.surface)
-            .cornerRadius(8)
+
+            if !listVM.projectFilters.isEmpty {
+                Divider()
+            }
+
+            ForEach(listVM.projectFilters) { project in
+                Button {
+                    listVM.selectedProjectId = project.id
+                } label: {
+                    HStack {
+                        Text(project.name)
+                        Text("(\(project.count))")
+                        if listVM.selectedProjectId == project.id {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+            }
+        } label: {
+            dropdownPill(text: selectedProjectName)
+        }
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+    }
+
+    private var environmentTabs: some View {
+        FlowLayout(spacing: 6, rowSpacing: 6) {
+            filterChip(
+                title: "All",
+                count: listVM.environmentFilterTotalCount,
+                isSelected: listVM.selectedEnvironment == nil,
+                accent: Color.vault.accent
+            ) {
+                listVM.selectedEnvironment = nil
+            }
+
+            ForEach(listVM.environmentFilters) { env in
+                filterChip(
+                    title: env.slug.uppercased(),
+                    count: env.count,
+                    isSelected: listVM.selectedEnvironment == env.slug,
+                    accent: EnvBadge.foreground(for: env.slug)
+                ) {
+                    listVM.selectedEnvironment = env.slug
+                }
+            }
+        }
+    }
+
+    private var summaryProjectText: String {
+        selectedProjectName == "All Projects" ? "All Projects" : selectedProjectName
+    }
+
+    private var summaryEnvironmentText: String {
+        listVM.selectedEnvironment?.uppercased() ?? "ALL ENVS"
+    }
+
+    private var selectedProjectName: String {
+        guard let selectedProjectId = listVM.selectedProjectId else { return "All Projects" }
+        return listVM.projectFilters.first(where: { $0.id == selectedProjectId })?.name ?? "Project"
+    }
+
+    @ViewBuilder
+    private func glassCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        content()
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .padding(16)
+            .background(.ultraThinMaterial.opacity(0.6))
+            .cornerRadius(10)
             .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color.vault.border, lineWidth: 1)
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(.white.opacity(0.06), lineWidth: 1)
+            )
+    }
+
+    @ViewBuilder
+    private func filterRow<Content: View>(icon: String, label: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 12))
+                    .foregroundColor(Color.vault.accent)
+                    .frame(width: 16)
+
+                Text(label)
+                    .font(.system(size: 12))
+                    .foregroundColor(.white.opacity(0.52))
+            }
+
+            content()
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+
+    @ViewBuilder
+    private func dropdownPill(text: String) -> some View {
+        HStack(spacing: 6) {
+            Text(text)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(.white.opacity(0.95))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(minWidth: 120, maxWidth: 190, alignment: .leading)
+
+            Image(systemName: "chevron.up.chevron.down")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundColor(Color.vault.accent.opacity(0.85))
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(Color.white.opacity(0.07))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                )
+        )
+    }
+
+    private func filterChip(title: String, count: Int, isSelected: Bool, accent: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Text(title)
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                Text("\(count)")
+                    .font(.system(size: 10, weight: .semibold))
+                    .opacity(0.75)
+            }
+            .foregroundColor(isSelected ? Color.vault.bg : accent)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .background(isSelected ? accent : accent.opacity(0.14))
+            .cornerRadius(6)
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(accent.opacity(isSelected ? 1 : 0.38), lineWidth: 1)
             )
         }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Secret List
@@ -246,6 +442,10 @@ struct SecretRow: View {
                         .foregroundColor(Color.vault.text)
                         .lineLimit(1)
 
+                    if let projectName = secret.projectName, !projectName.isEmpty {
+                        ProjectBadge(name: projectName)
+                    }
+
                     if let env = secret.environment {
                         EnvBadge(slug: env)
                     }
@@ -325,6 +525,27 @@ struct SecretRow: View {
         .onHover { hovering in
             isHovered = hovering
         }
+    }
+}
+
+// MARK: - Project Badge
+
+struct ProjectBadge: View {
+    let name: String
+
+    var body: some View {
+        Text(name)
+            .font(.system(size: 9, weight: .semibold))
+            .foregroundColor(.white.opacity(0.55))
+            .lineLimit(1)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(Color.white.opacity(0.07))
+            .cornerRadius(4)
+            .overlay(
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(Color.white.opacity(0.10), lineWidth: 1)
+            )
     }
 }
 

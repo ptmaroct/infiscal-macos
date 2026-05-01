@@ -7,6 +7,8 @@ final class SecretListViewModel: ObservableObject {
     let appViewModel: AppViewModel
 
     @Published var searchText: String = ""
+    @Published var selectedProjectId: String?
+    @Published var selectedEnvironment: String?
     @Published var editingSecret: SecretItem?
     @Published var editValue: String = ""
     @Published var editComment: String = ""
@@ -53,14 +55,74 @@ final class SecretListViewModel: ObservableObject {
         return result
     }
 
-    var filteredSecrets: [SecretItem] {
-        let secrets = stableSecrets
-        if searchText.isEmpty { return secrets }
-        return secrets.filter {
-            $0.key.localizedCaseInsensitiveContains(searchText) ||
-            ($0.comment?.localizedCaseInsensitiveContains(searchText) ?? false) ||
-            ($0.tags?.contains(where: { $0.displayName.localizedCaseInsensitiveContains(searchText) }) ?? false)
+    var projectFilters: [SecretProjectFilter] {
+        Dictionary(grouping: stableSecrets, by: { $0.projectFilterId })
+            .map { id, secrets in
+                SecretProjectFilter(
+                    id: id,
+                    name: secrets.first?.projectName ?? AppConfiguration.load()?.projectName ?? "Project",
+                    count: secrets.count
+                )
+            }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    var environmentFilters: [SecretEnvironmentFilter] {
+        let source = stableSecrets.filter {
+            selectedProjectId == nil || $0.projectFilterId == selectedProjectId
         }
+        return Dictionary(grouping: source, by: { $0.environment ?? AppConfiguration.defaultEnvironment })
+            .map { slug, secrets in
+                SecretEnvironmentFilter(slug: slug, count: secrets.count)
+            }
+            .sorted { lhs, rhs in
+                let rank = ["prod": 0, "production": 0, "staging": 1, "stage": 1, "stg": 1, "dev": 2, "development": 2]
+                let lhsRank = rank[lhs.slug.lowercased()] ?? 10
+                let rhsRank = rank[rhs.slug.lowercased()] ?? 10
+                if lhsRank != rhsRank { return lhsRank < rhsRank }
+                return lhs.slug.localizedCaseInsensitiveCompare(rhs.slug) == .orderedAscending
+            }
+    }
+
+    var activeFilterCount: Int {
+        [selectedProjectId, selectedEnvironment].compactMap { $0 }.count
+    }
+
+    var isFiltering: Bool {
+        !searchText.isEmpty || selectedProjectId != nil || selectedEnvironment != nil
+    }
+
+    var filteredCount: Int {
+        filteredSecrets.count
+    }
+
+    var totalCount: Int {
+        stableSecrets.count
+    }
+
+    var environmentFilterTotalCount: Int {
+        stableSecrets.filter {
+            selectedProjectId == nil || $0.projectFilterId == selectedProjectId
+        }.count
+    }
+
+    var filteredSecrets: [SecretItem] {
+        stableSecrets.filter { secret in
+            let matchesProject = selectedProjectId == nil || secret.projectFilterId == selectedProjectId
+            let matchesEnvironment = selectedEnvironment == nil || secret.environment == selectedEnvironment
+            let matchesSearch = searchText.isEmpty
+                || secret.key.localizedCaseInsensitiveContains(searchText)
+                || (secret.comment?.localizedCaseInsensitiveContains(searchText) ?? false)
+                || (secret.tags?.contains(where: { $0.displayName.localizedCaseInsensitiveContains(searchText) }) ?? false)
+
+            return matchesProject && matchesEnvironment && matchesSearch
+        }
+    }
+
+    func clearFilters() {
+        searchText = ""
+        selectedProjectId = nil
+        selectedEnvironment = nil
     }
 
     func copy(_ secret: SecretItem) {
@@ -139,6 +201,23 @@ final class SecretListViewModel: ObservableObject {
 
 extension SecretItem {
     var stableListIdentity: String {
-        "\(environment ?? AppConfiguration.defaultEnvironment):\(id):\(key)"
+        "\(projectFilterId):\(environment ?? AppConfiguration.defaultEnvironment):\(id):\(key)"
     }
+
+    var projectFilterId: String {
+        projectId ?? AppConfiguration.load()?.projectId ?? "current"
+    }
+}
+
+struct SecretProjectFilter: Identifiable, Hashable {
+    let id: String
+    let name: String
+    let count: Int
+}
+
+struct SecretEnvironmentFilter: Identifiable, Hashable {
+    let slug: String
+    let count: Int
+
+    var id: String { slug }
 }

@@ -15,7 +15,8 @@ struct AddSecretView: View {
 
     var body: some View {
         ZStack {
-            WindowBackground()
+            VisualEffectBlur(material: .hudWindow, blendingMode: .behindWindow)
+                .ignoresSafeArea()
             formContent
         }
         .frame(width: 480, height: 720)

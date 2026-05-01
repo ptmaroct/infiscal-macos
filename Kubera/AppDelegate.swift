@@ -354,7 +354,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSear
             let view = SecretListView(viewModel: viewModel) { [weak self] in
                 self?.secretListWindow?.close()
             }
-            secretListWindow = makeStyledWindow(view: view, width: 660, height: 540)
+            secretListWindow = makeStyledWindow(
+                view: view,
+                width: SecretListView.windowWidth,
+                height: SecretListView.windowHeight
+            )
         }
         secretListWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -365,7 +369,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSear
             let view = AddSecretView(viewModel: viewModel) { [weak self] in
                 self?.addSecretWindow?.close()
             }
-            addSecretWindow = makeStyledWindow(view: view, width: 480, height: 540)
+            addSecretWindow = makeStyledWindow(view: view, width: 480, height: 720)
         }
         addSecretWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
