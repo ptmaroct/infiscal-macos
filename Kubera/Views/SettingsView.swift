@@ -8,6 +8,7 @@ struct SettingsView: View {
     @State private var projects: [InfisicalProject] = []
     @State private var selectedProject: InfisicalProject?
     @State private var selectedEnvironment: InfisicalEnvironment?
+    @State private var allEnvironmentsSelected: Bool = false
     @State private var secretPath: String = "/"
     @State private var isLoading = true
     @State private var statusMessage: String?
@@ -23,6 +24,12 @@ struct SettingsView: View {
     @State private var touchIDEnabled: Bool = false
     @State private var touchIDTimeout: TimeoutPreset = .fifteenMinutes
     @State private var touchIDAvailable: Bool = false
+
+    // Expiry notification state
+    @State private var expiryNotificationsEnabled: Bool = false
+    @State private var expiryNotify7Days: Bool = true
+    @State private var expiryNotify1Day: Bool = true
+    @State private var expiryNotifyAtExpiry: Bool = true
 
     var body: some View {
         ZStack {
@@ -75,6 +82,7 @@ struct SettingsView: View {
                                                 Button {
                                                     selectedProject = project
                                                     selectedEnvironment = project.environments.first
+                                                    allEnvironmentsSelected = false
                                                 } label: {
                                                     HStack {
                                                         Text(project.name)
@@ -107,13 +115,26 @@ struct SettingsView: View {
                                     ) {
                                         if let envs = selectedProject?.environments, !envs.isEmpty {
                                             Menu {
+                                                Button {
+                                                    allEnvironmentsSelected = true
+                                                    selectedEnvironment = nil
+                                                } label: {
+                                                    HStack {
+                                                        Text("All Environments")
+                                                        if allEnvironmentsSelected {
+                                                            Image(systemName: "checkmark")
+                                                        }
+                                                    }
+                                                }
+                                                Divider()
                                                 ForEach(envs) { env in
                                                     Button {
+                                                        allEnvironmentsSelected = false
                                                         selectedEnvironment = env
                                                     } label: {
                                                         HStack {
                                                             Text(env.name)
-                                                            if selectedEnvironment?.id == env.id {
+                                                            if !allEnvironmentsSelected && selectedEnvironment?.id == env.id {
                                                                 Image(systemName: "checkmark")
                                                             }
                                                         }
@@ -121,7 +142,9 @@ struct SettingsView: View {
                                                 }
                                             } label: {
                                                 HStack(spacing: 4) {
-                                                    Text(selectedEnvironment?.name ?? "Select...")
+                                                    Text(allEnvironmentsSelected
+                                                         ? "All Environments"
+                                                         : (selectedEnvironment?.name ?? "Select..."))
                                                         .font(.system(size: 13))
                                                         .foregroundColor(.white.opacity(0.85))
                                                     Image(systemName: "chevron.up.chevron.down")
@@ -269,6 +292,65 @@ struct SettingsView: View {
                                 }
                             }
 
+                            // Expiry reminders card
+                            glassCard {
+                                VStack(spacing: 12) {
+                                    settingsRow(
+                                        icon: "bell.badge",
+                                        label: "Expiry Reminders"
+                                    ) {
+                                        Toggle("", isOn: $expiryNotificationsEnabled)
+                                            .toggleStyle(.switch)
+                                            .controlSize(.small)
+                                            .tint(Color.vault.accent)
+                                    }
+
+                                    if expiryNotificationsEnabled {
+                                        Divider().opacity(0.2)
+
+                                        settingsRow(
+                                            icon: "calendar.badge.clock",
+                                            label: "7 days before"
+                                        ) {
+                                            Toggle("", isOn: $expiryNotify7Days)
+                                                .toggleStyle(.switch)
+                                                .controlSize(.small)
+                                                .tint(Color.vault.accent)
+                                        }
+
+                                        settingsRow(
+                                            icon: "calendar",
+                                            label: "1 day before"
+                                        ) {
+                                            Toggle("", isOn: $expiryNotify1Day)
+                                                .toggleStyle(.switch)
+                                                .controlSize(.small)
+                                                .tint(Color.vault.accent)
+                                        }
+
+                                        settingsRow(
+                                            icon: "exclamationmark.circle",
+                                            label: "On expiry day"
+                                        ) {
+                                            Toggle("", isOn: $expiryNotifyAtExpiry)
+                                                .toggleStyle(.switch)
+                                                .controlSize(.small)
+                                                .tint(Color.vault.accent)
+                                        }
+
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "info.circle")
+                                                .font(.system(size: 9))
+                                            Text("Local macOS notifications fire at 9am for secrets with an expiry date.")
+                                                .font(.system(size: 10))
+                                        }
+                                        .foregroundColor(.white.opacity(0.35))
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .padding(.leading, 28)
+                                    }
+                                }
+                            }
+
                             // About card
                             glassCard {
                                 VStack(spacing: 12) {
@@ -360,8 +442,8 @@ struct SettingsView: View {
                         .cornerRadius(10)
                 }
                 .buttonStyle(.plain)
-                .disabled(selectedProject == nil || selectedEnvironment == nil)
-                .opacity(selectedProject == nil || selectedEnvironment == nil ? 0.4 : 1)
+                .disabled(selectedProject == nil || (!allEnvironmentsSelected && selectedEnvironment == nil))
+                .opacity(selectedProject == nil || (!allEnvironmentsSelected && selectedEnvironment == nil) ? 0.4 : 1)
                 .padding(.horizontal, 24)
                 .padding(.bottom, 20)
             }
@@ -372,7 +454,12 @@ struct SettingsView: View {
             loadData()
             loadShortcut()
             loadTouchIDSettings()
+            loadExpiryNotificationSettings()
         }
+        .onChange(of: expiryNotificationsEnabled) { _ in saveExpiryNotificationSettings() }
+        .onChange(of: expiryNotify7Days) { _ in saveExpiryNotificationSettings() }
+        .onChange(of: expiryNotify1Day) { _ in saveExpiryNotificationSettings() }
+        .onChange(of: expiryNotifyAtExpiry) { _ in saveExpiryNotificationSettings() }
         .onDisappear {
             stopRecording()
         }
@@ -479,7 +566,13 @@ struct SettingsView: View {
         if let config = AppConfiguration.load() {
             selectedProject = projects.first(where: { $0.id == config.projectId })
             if let project = selectedProject {
-                selectedEnvironment = project.environments.first(where: { $0.slug == config.environment })
+                if config.isAllEnvironments {
+                    allEnvironmentsSelected = true
+                    selectedEnvironment = nil
+                } else {
+                    allEnvironmentsSelected = false
+                    selectedEnvironment = project.environments.first(where: { $0.slug == config.environment })
+                }
             }
             secretPath = config.secretPath
         }
@@ -494,16 +587,58 @@ struct SettingsView: View {
         touchIDTimeout = settings.timeoutPreset
     }
 
+    // MARK: - Expiry Notifications
+
+    private func loadExpiryNotificationSettings() {
+        let settings = ExpiryNotificationSettings.load()
+        expiryNotificationsEnabled = settings.enabled
+        expiryNotify7Days = settings.notify7Days
+        expiryNotify1Day = settings.notify1Day
+        expiryNotifyAtExpiry = settings.notifyAtExpiry
+    }
+
+    private func saveExpiryNotificationSettings() {
+        let settings = ExpiryNotificationSettings(
+            enabled: expiryNotificationsEnabled,
+            notify7Days: expiryNotify7Days,
+            notify1Day: expiryNotify1Day,
+            notifyAtExpiry: expiryNotifyAtExpiry
+        )
+        settings.save()
+
+        // Reconcile pending notifications immediately so toggles take effect.
+        // Group secrets by their attached env so each env reconciles its own slice.
+        let secrets = viewModel.secrets
+        let configEnv = AppConfiguration.load()?.environment ?? AppConfiguration.defaultEnvironment
+        let envBuckets: [String: [SecretItem]] = Dictionary(grouping: secrets) {
+            $0.environment ?? configEnv
+        }
+        if settings.enabled {
+            Task {
+                await ExpiryNotificationScheduler.shared.requestAuthorizationIfNeeded()
+                for (env, items) in envBuckets {
+                    ExpiryNotificationScheduler.shared.reconcile(secrets: items, environment: env)
+                }
+            }
+        } else {
+            ExpiryNotificationScheduler.shared.cancelAll()
+        }
+    }
+
     // MARK: - Save
 
     private func save() {
-        guard let project = selectedProject,
-              let env = selectedEnvironment else { return }
+        guard let project = selectedProject else { return }
+        guard allEnvironmentsSelected || selectedEnvironment != nil else { return }
+
+        let envSlug: String = allEnvironmentsSelected
+            ? AppConfiguration.allEnvironmentsSentinel
+            : (selectedEnvironment?.slug ?? AppConfiguration.defaultEnvironment)
 
         let existingConfig = AppConfiguration.load()
         let config = AppConfiguration(
             projectId: project.id,
-            environment: env.slug,
+            environment: envSlug,
             secretPath: secretPath,
             baseURL: existingConfig?.baseURL ?? AppConfiguration.defaultBaseURL,
             projectName: project.name,

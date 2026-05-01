@@ -17,7 +17,7 @@ struct AddSecretView: View {
             WindowBackground()
             formContent
         }
-        .frame(width: 480, height: 540)
+        .frame(width: 480, height: 660)
         .preferredColorScheme(.dark)
         .onAppear {
             Task { await addVM.loadInitialData() }
@@ -59,6 +59,10 @@ struct AddSecretView: View {
                         placeholder: "Optional description...",
                         lineCount: 2
                     )
+
+                    expirySection
+
+                    serviceURLSection
 
                     tagSection
                 }
@@ -180,6 +184,120 @@ struct AddSecretView: View {
                 }
             }
         }
+    }
+
+    // MARK: - Expiry & Service URL
+
+    private var expirySection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("EXPIRES")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(Color.vault.textSecondary)
+                .tracking(1.2)
+
+            HStack(spacing: 8) {
+                Image(systemName: "calendar")
+                    .font(.system(size: 11))
+                    .foregroundColor(Color.vault.textTertiary)
+
+                if let date = addVM.expiryDate {
+                    DatePicker(
+                        "",
+                        selection: Binding(
+                            get: { date },
+                            set: { addVM.expiryDate = $0 }
+                        ),
+                        in: Date()...,
+                        displayedComponents: .date
+                    )
+                    .labelsHidden()
+                    .datePickerStyle(.compact)
+
+                    Spacer()
+
+                    Button {
+                        addVM.expiryDate = nil
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 12))
+                            .foregroundColor(Color.vault.textTertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Clear expiry")
+                } else {
+                    Button {
+                        let cal = Calendar.current
+                        addVM.expiryDate = cal.date(byAdding: .day, value: 90, to: Date())
+                    } label: {
+                        Text("Set expiry date")
+                            .font(.system(size: 12))
+                            .foregroundColor(Color.vault.accent)
+                    }
+                    .buttonStyle(.plain)
+
+                    Spacer()
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Color.vault.bg)
+            .cornerRadius(8)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.vault.border, lineWidth: 1)
+            )
+        }
+    }
+
+    private var serviceURLSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("SERVICE URL")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(Color.vault.textSecondary)
+                .tracking(1.2)
+
+            HStack(spacing: 0) {
+                Image(systemName: "link")
+                    .font(.system(size: 11))
+                    .foregroundColor(Color.vault.textTertiary)
+                    .padding(.trailing, 8)
+
+                TextField("https://platform.example.com/api-keys", text: $addVM.serviceURL)
+                    .font(.system(size: 13))
+                    .foregroundColor(Color.vault.text)
+                    .textFieldStyle(.plain)
+
+                if let url = parsedServiceURL {
+                    Button {
+                        NSWorkspace.shared.open(url)
+                    } label: {
+                        Image(systemName: "arrow.up.right.square")
+                            .font(.system(size: 12))
+                            .foregroundColor(Color.vault.accent)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Open in browser")
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Color.vault.bg)
+            .cornerRadius(8)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.vault.border, lineWidth: 1)
+            )
+        }
+    }
+
+    private var parsedServiceURL: URL? {
+        let trimmed = addVM.serviceURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              let url = URL(string: trimmed),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https",
+              url.host != nil else { return nil }
+        return url
     }
 
     // MARK: - Tags
@@ -380,6 +498,8 @@ struct AddSecretView: View {
                         addVM.key = ""
                         addVM.value = ""
                         addVM.comment = ""
+                        addVM.expiryDate = nil
+                        addVM.serviceURL = ""
                         addVM.selectedTagIds = []
                         addVM.pendingTagNames = []
 

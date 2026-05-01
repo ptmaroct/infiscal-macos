@@ -60,7 +60,9 @@ final class AppViewModel: ObservableObject {
         copyCounts[key] ?? 0
     }
 
-    /// Load secrets via REST API with cache-first strategy
+    /// Load secrets via REST API with cache-first strategy.
+    /// When `config.environment == "*"` (all-envs mode), fetches every env defined
+    /// on the selected project in parallel and tags each `SecretItem.environment`.
     func loadSecrets() async {
         guard let config = AppConfiguration.load() else {
             isConfigured = false
@@ -73,15 +75,34 @@ final class AppViewModel: ObservableObject {
         }
         errorMessage = nil
 
+        let envSlugs: [String]
+        if config.isAllEnvironments {
+            envSlugs = await resolveProjectEnvSlugs(projectId: config.projectId,
+                                                   baseURL: config.baseURL)
+            if envSlugs.isEmpty {
+                errorMessage = "Project has no environments"
+                isLoading = false
+                return
+            }
+        } else {
+            envSlugs = [config.environment]
+        }
+
         do {
-            let fresh = try await InfisicalCLIService.listSecretsViaAPI(
-                environment: config.environment,
+            let merged = try await fetchSecrets(
+                envSlugs: envSlugs,
                 projectId: config.projectId,
                 secretPath: config.secretPath,
                 baseURL: config.baseURL
             )
-            secrets = fresh
-            cacheSecrets(fresh)
+            secrets = merged
+            cacheSecrets(merged)
+            for env in envSlugs {
+                let envSecrets = merged.filter { $0.environment == env }
+                ExpiryNotificationScheduler.shared.reconcile(
+                    secrets: envSecrets, environment: env
+                )
+            }
         } catch {
             // Only show error if we have no data to display
             if secrets.isEmpty {
@@ -90,6 +111,51 @@ final class AppViewModel: ObservableObject {
         }
 
         isLoading = false
+    }
+
+    /// Fetch secrets across one or more env slugs. Each result has `environment` set.
+    private func fetchSecrets(
+        envSlugs: [String],
+        projectId: String,
+        secretPath: String,
+        baseURL: String
+    ) async throws -> [SecretItem] {
+        try await withThrowingTaskGroup(of: (String, [SecretItem]).self) { group in
+            for env in envSlugs {
+                group.addTask {
+                    let items = try await InfisicalCLIService.listSecretsViaAPI(
+                        environment: env,
+                        projectId: projectId,
+                        secretPath: secretPath,
+                        baseURL: baseURL
+                    )
+                    let tagged = items.map { item -> SecretItem in
+                        var copy = item
+                        copy.environment = env
+                        return copy
+                    }
+                    return (env, tagged)
+                }
+            }
+
+            var collected: [(String, [SecretItem])] = []
+            for try await result in group {
+                collected.append(result)
+            }
+            // Preserve env ordering from envSlugs for stable display.
+            let order = Dictionary(uniqueKeysWithValues: envSlugs.enumerated().map { ($1, $0) })
+            collected.sort { (order[$0.0] ?? 0) < (order[$1.0] ?? 0) }
+            return collected.flatMap { $0.1 }
+        }
+    }
+
+    /// Look up env slugs for a project (cache-first, then fetch).
+    private func resolveProjectEnvSlugs(projectId: String, baseURL: String) async -> [String] {
+        if let project = ProjectCache.shared.projects.first(where: { $0.id == projectId }) {
+            return project.environments.map { $0.slug }
+        }
+        let fresh = await ProjectCache.shared.fetchProjects()
+        return fresh.first(where: { $0.id == projectId })?.environments.map { $0.slug } ?? []
     }
 
     func copySecret(_ secret: SecretItem) {
@@ -117,16 +183,29 @@ final class AppViewModel: ObservableObject {
         }
     }
 
-    /// Update an existing secret's value and comment
-    func updateSecret(_ secret: SecretItem, newValue: String, newComment: String) async -> Bool {
+    /// Update an existing secret's value, comment, expiry, and service URL.
+    /// Pass nil for `newExpiry` / `newServiceURL` to clear them (metadata is rewritten on every save).
+    func updateSecret(
+        _ secret: SecretItem,
+        newValue: String,
+        newComment: String,
+        newExpiry: Date?,
+        newServiceURL: String?
+    ) async -> Bool {
         guard let config = AppConfiguration.load() else { return false }
+        // In all-envs mode the per-secret env is the source of truth.
+        let env = secret.environment ?? config.environment
+        guard env != AppConfiguration.allEnvironmentsSentinel else { return false }
 
         do {
             try await InfisicalCLIService.updateSecret(
                 name: secret.key,
                 value: newValue,
                 comment: newComment,
-                environment: config.environment,
+                expiryDate: newExpiry,
+                serviceURL: newServiceURL,
+                metadataExplicit: true,
+                environment: env,
                 projectId: config.projectId,
                 secretPath: config.secretPath,
                 baseURL: config.baseURL
@@ -142,16 +221,19 @@ final class AppViewModel: ObservableObject {
     /// Delete a secret
     func deleteSecret(_ secret: SecretItem) async -> Bool {
         guard let config = AppConfiguration.load() else { return false }
+        let env = secret.environment ?? config.environment
+        guard env != AppConfiguration.allEnvironmentsSentinel else { return false }
 
         do {
             try await InfisicalCLIService.deleteSecret(
                 name: secret.key,
-                environment: config.environment,
+                environment: env,
                 projectId: config.projectId,
                 secretPath: config.secretPath,
                 baseURL: config.baseURL
             )
-            secrets.removeAll { $0.key == secret.key }
+            // In all-envs mode keep entries from other envs intact.
+            secrets.removeAll { $0.key == secret.key && ($0.environment ?? env) == env }
             cacheSecrets(secrets)
             return true
         } catch {

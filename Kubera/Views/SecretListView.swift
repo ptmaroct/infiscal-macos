@@ -45,6 +45,8 @@ struct SecretListView: View {
                 secret: secret,
                 value: $listVM.editValue,
                 comment: $listVM.editComment,
+                expiryDate: $listVM.editExpiryDate,
+                serviceURL: $listVM.editServiceURL,
                 isUpdating: listVM.isUpdating,
                 onSave: {
                     Task { await listVM.saveEdit() }
@@ -236,11 +238,17 @@ struct SecretRow: View {
         HStack(alignment: .top, spacing: 12) {
             // Left: key, comment, tags
             VStack(alignment: .leading, spacing: 6) {
-                // Key name
-                Text(secret.key)
-                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                    .foregroundColor(Color.vault.text)
-                    .lineLimit(1)
+                // Key name + env badge
+                HStack(spacing: 6) {
+                    Text(secret.key)
+                        .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                        .foregroundColor(Color.vault.text)
+                        .lineLimit(1)
+
+                    if let env = secret.environment {
+                        EnvBadge(slug: env)
+                    }
+                }
 
                 // Comment + Tags row
                 HStack(spacing: 8) {
@@ -319,6 +327,47 @@ struct SecretRow: View {
     }
 }
 
+// MARK: - Environment Badge
+
+struct EnvBadge: View {
+    let slug: String
+
+    var body: some View {
+        Text(slug.uppercased())
+            .font(.system(size: 9, weight: .bold, design: .rounded))
+            .tracking(0.5)
+            .foregroundColor(EnvBadge.foreground(for: slug))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(EnvBadge.background(for: slug))
+            .cornerRadius(4)
+            .overlay(
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(EnvBadge.foreground(for: slug).opacity(0.4), lineWidth: 1)
+            )
+    }
+
+    /// Color derived from env slug. Well-known names get curated colors;
+    /// anything else hashes to a stable hue so different envs stay distinguishable.
+    static func foreground(for slug: String) -> Color {
+        let s = slug.lowercased()
+        switch s {
+        case "prod", "production": return Color(red: 0.96, green: 0.42, blue: 0.42)
+        case "staging", "stage", "stg": return Color(red: 0.95, green: 0.75, blue: 0.30)
+        case "dev", "development": return Color(red: 0.40, green: 0.78, blue: 0.50)
+        case "test", "testing", "qa": return Color(red: 0.55, green: 0.72, blue: 0.95)
+        case "preview": return Color(red: 0.78, green: 0.55, blue: 0.95)
+        default:
+            let hue = Double(abs(s.hashValue) % 360) / 360.0
+            return Color(hue: hue, saturation: 0.55, brightness: 0.85)
+        }
+    }
+
+    static func background(for slug: String) -> Color {
+        foreground(for: slug).opacity(0.18)
+    }
+}
+
 // MARK: - Tag Chip
 
 struct TagChip: View {
@@ -341,15 +390,27 @@ struct EditSecretSheet: View {
     let secret: SecretItem
     @Binding var value: String
     @Binding var comment: String
+    @Binding var expiryDate: Date?
+    @Binding var serviceURL: String
     let isUpdating: Bool
     let onSave: () -> Void
     let onCancel: () -> Void
+
+    private var parsedURL: URL? {
+        let trimmed = serviceURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              let url = URL(string: trimmed),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https",
+              url.host != nil else { return nil }
+        return url
+    }
 
     var body: some View {
         ZStack {
             Color.vault.bg.ignoresSafeArea()
 
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 18) {
                 // Header
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Edit Secret")
@@ -361,24 +422,123 @@ struct EditSecretSheet: View {
                         .foregroundColor(Color.vault.accent)
                 }
 
-                // Value field
-                VaultTextField(
-                    label: "Value",
-                    text: $value,
-                    isMonospaced: true,
-                    isSecure: true,
-                    placeholder: "Secret value"
-                )
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        // Value field
+                        VaultTextField(
+                            label: "Value",
+                            text: $value,
+                            isMonospaced: true,
+                            isSecure: true,
+                            placeholder: "Secret value"
+                        )
 
-                // Comment field
-                VaultTextEditor(
-                    label: "Comment",
-                    text: $comment,
-                    placeholder: "Optional description...",
-                    lineCount: 3
-                )
+                        // Comment field
+                        VaultTextEditor(
+                            label: "Comment",
+                            text: $comment,
+                            placeholder: "Optional description...",
+                            lineCount: 2
+                        )
 
-                Spacer()
+                        // Expiry
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("EXPIRES")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundColor(Color.vault.textSecondary)
+                                .tracking(1.2)
+
+                            HStack(spacing: 8) {
+                                Image(systemName: "calendar")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(Color.vault.textTertiary)
+
+                                if let date = expiryDate {
+                                    DatePicker(
+                                        "",
+                                        selection: Binding(
+                                            get: { date },
+                                            set: { expiryDate = $0 }
+                                        ),
+                                        displayedComponents: .date
+                                    )
+                                    .labelsHidden()
+                                    .datePickerStyle(.compact)
+
+                                    Spacer()
+
+                                    Button {
+                                        expiryDate = nil
+                                    } label: {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .font(.system(size: 12))
+                                            .foregroundColor(Color.vault.textTertiary)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .help("Clear expiry")
+                                } else {
+                                    Button {
+                                        expiryDate = Calendar.current.date(byAdding: .day, value: 90, to: Date())
+                                    } label: {
+                                        Text("Set expiry date")
+                                            .font(.system(size: 12))
+                                            .foregroundColor(Color.vault.accent)
+                                    }
+                                    .buttonStyle(.plain)
+                                    Spacer()
+                                }
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color.vault.bg)
+                            .cornerRadius(8)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(Color.vault.border, lineWidth: 1)
+                            )
+                        }
+
+                        // Service URL
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("SERVICE URL")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundColor(Color.vault.textSecondary)
+                                .tracking(1.2)
+
+                            HStack(spacing: 0) {
+                                Image(systemName: "link")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(Color.vault.textTertiary)
+                                    .padding(.trailing, 8)
+
+                                TextField("https://platform.example.com/api-keys", text: $serviceURL)
+                                    .font(.system(size: 13))
+                                    .foregroundColor(Color.vault.text)
+                                    .textFieldStyle(.plain)
+
+                                if let url = parsedURL {
+                                    Button {
+                                        NSWorkspace.shared.open(url)
+                                    } label: {
+                                        Image(systemName: "arrow.up.right.square")
+                                            .font(.system(size: 12))
+                                            .foregroundColor(Color.vault.accent)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .help("Open in browser")
+                                }
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color.vault.bg)
+                            .cornerRadius(8)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(Color.vault.border, lineWidth: 1)
+                            )
+                        }
+                    }
+                }
 
                 // Actions
                 HStack {
@@ -400,6 +560,6 @@ struct EditSecretSheet: View {
             }
             .padding(28)
         }
-        .frame(width: 440, height: 360)
+        .frame(width: 460, height: 560)
     }
 }

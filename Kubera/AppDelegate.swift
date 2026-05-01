@@ -25,6 +25,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         setupMenu()
         setupKeyboardShortcut()
 
+        // Local notification scheduler — install delegate, request auth lazily
+        // when the user actually enables expiry reminders in Settings.
+        ExpiryNotificationScheduler.shared.installDelegate()
+        if ExpiryNotificationSettings.load().enabled {
+            Task {
+                await ExpiryNotificationScheduler.shared.requestAuthorizationIfNeeded()
+            }
+        }
+
         if !viewModel.isConfigured {
             showOnboarding()
         }
@@ -177,11 +186,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             emptyItem.isEnabled = false
             menu.insertItem(emptyItem, at: secretsRangeStart)
         } else {
+            let isAllEnvs = AppConfiguration.load()?.isAllEnvironments ?? false
             for (index, secret) in displaySecrets.enumerated() {
                 let item = NSMenuItem(title: secret.key, action: #selector(copySecret(_:)), keyEquivalent: "")
                 item.target = self
                 item.tag = index
-                item.toolTip = "Click to copy value"
+                if isAllEnvs, let env = secret.environment {
+                    item.attributedTitle = makeMenuTitle(key: secret.key, env: env)
+                    item.toolTip = "Copy \(secret.key) (\(env))"
+                } else {
+                    item.toolTip = "Click to copy value"
+                }
                 secretMenuItems.append(item)
                 menu.insertItem(item, at: secretsRangeStart + index)
             }
@@ -240,6 +255,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     }
                 }
             }
+        }
+    }
+
+    /// Build a menu item title that shows the secret key followed by a small
+    /// colored env tag — used in all-envs mode to disambiguate the same key
+    /// across environments.
+    private func makeMenuTitle(key: String, env: String) -> NSAttributedString {
+        let result = NSMutableAttributedString()
+
+        let keyAttrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.menuFont(ofSize: 0)
+        ]
+        result.append(NSAttributedString(string: key, attributes: keyAttrs))
+        result.append(NSAttributedString(string: "  ", attributes: keyAttrs))
+
+        let envAttrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 9, weight: .bold),
+            .foregroundColor: envColor(for: env)
+        ]
+        result.append(NSAttributedString(string: env.uppercased(), attributes: envAttrs))
+        return result
+    }
+
+    /// Stable color per env slug, mirroring EnvBadge's palette.
+    private func envColor(for slug: String) -> NSColor {
+        switch slug.lowercased() {
+        case "prod", "production": return NSColor(red: 0.96, green: 0.42, blue: 0.42, alpha: 1)
+        case "staging", "stage", "stg": return NSColor(red: 0.95, green: 0.75, blue: 0.30, alpha: 1)
+        case "dev", "development": return NSColor(red: 0.40, green: 0.78, blue: 0.50, alpha: 1)
+        case "test", "testing", "qa": return NSColor(red: 0.55, green: 0.72, blue: 0.95, alpha: 1)
+        case "preview": return NSColor(red: 0.78, green: 0.55, blue: 0.95, alpha: 1)
+        default:
+            let hue = CGFloat(abs(slug.lowercased().hashValue) % 360) / 360.0
+            return NSColor(hue: hue, saturation: 0.55, brightness: 0.85, alpha: 1)
         }
     }
 

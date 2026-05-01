@@ -22,6 +22,12 @@ final class AddSecretViewModel: ObservableObject {
     @Published var comment: String = ""
     @Published var newTagName: String = ""
 
+    /// Optional expiry date — nil = never expires.
+    @Published var expiryDate: Date? = nil
+
+    /// Optional URL to the issuing service's API-keys page.
+    @Published var serviceURL: String = ""
+
     /// Tags typed by user that don't exist yet — created on submit
     @Published var pendingTagNames: [String] = []
 
@@ -226,6 +232,9 @@ final class AddSecretViewModel: ObservableObject {
         let secretComment = comment
         let tagIdArray = Array(allTagIds)
         let projectId = project.id
+        let expiry = expiryDate
+        let serviceURLValue = serviceURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let serviceURLArg: String? = serviceURLValue.isEmpty ? nil : serviceURLValue
 
         do {
             try await withThrowingTaskGroup(of: Void.self) { group in
@@ -236,6 +245,8 @@ final class AddSecretViewModel: ObservableObject {
                             value: secretValue,
                             comment: secretComment,
                             tagIds: tagIdArray,
+                            expiryDate: expiry,
+                            serviceURL: serviceURLArg,
                             environment: env.slug,
                             projectId: projectId,
                             secretPath: "/",

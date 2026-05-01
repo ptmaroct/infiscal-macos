@@ -238,12 +238,20 @@ struct InfisicalCLIService {
         return decoded.secrets
     }
 
-    /// Update an existing secret via Infisical REST API
+    /// Update an existing secret via Infisical REST API.
+    ///
+    /// `expiryDate` and `serviceURL` are written into Infisical's native `secretMetadata`
+    /// array. Pass `metadataExplicit: true` (default) to overwrite metadata even when
+    /// both are nil — that lets callers clear the values. Pass `false` to leave
+    /// existing metadata untouched.
     static func updateSecret(
         name: String,
         value: String,
         comment: String = "",
         tagIds: [String] = [],
+        expiryDate: Date? = nil,
+        serviceURL: String? = nil,
+        metadataExplicit: Bool = true,
         environment: String,
         projectId: String,
         secretPath: String = "/",
@@ -266,6 +274,11 @@ struct InfisicalCLIService {
         ]
         if !comment.isEmpty { body["secretComment"] = comment }
         if !tagIds.isEmpty { body["tagIds"] = tagIds }
+        if metadataExplicit {
+            body["secretMetadata"] = buildSecretMetadataPayload(
+                expiryDate: expiryDate, serviceURL: serviceURL
+            )
+        }
 
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -313,12 +326,14 @@ struct InfisicalCLIService {
         }
     }
 
-    /// Create a new secret via Infisical REST API (supports comment and tags)
+    /// Create a new secret via Infisical REST API (supports comment, tags, and metadata).
     static func createSecretViaAPI(
         name: String,
         value: String,
         comment: String = "",
         tagIds: [String] = [],
+        expiryDate: Date? = nil,
+        serviceURL: String? = nil,
         environment: String,
         projectId: String,
         secretPath: String = "/",
@@ -342,6 +357,8 @@ struct InfisicalCLIService {
         ]
         if !comment.isEmpty { body["secretComment"] = comment }
         if !tagIds.isEmpty { body["tagIds"] = tagIds }
+        let metadata = buildSecretMetadataPayload(expiryDate: expiryDate, serviceURL: serviceURL)
+        if !metadata.isEmpty { body["secretMetadata"] = metadata }
 
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, response) = try await URLSession.shared.data(for: request)

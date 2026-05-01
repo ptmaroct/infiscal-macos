@@ -17,6 +17,14 @@ struct AppConfiguration: Codable {
     static let defaultBaseURL = "https://app.infisical.com"
     static let defaultEnvironment = "dev"
     static let defaultSecretPath = "/"
+
+    /// Sentinel value stored in `environment` to indicate "fetch all envs in this project".
+    static let allEnvironmentsSentinel = "*"
+
+    /// True if this configuration is in all-envs mode.
+    var isAllEnvironments: Bool {
+        environment == Self.allEnvironmentsSentinel
+    }
     static let defaultShortcutKeyCode = UInt32(kVK_ANSI_K)
     static let defaultShortcutModifiers = UInt32(cmdKey | shiftKey)
 
