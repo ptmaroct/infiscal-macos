@@ -24,6 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         setupStatusItem()
         setupMenu()
         setupKeyboardShortcut()
+        setupDockVisibilityObservers()
 
         // Local notification scheduler — install delegate, request auth lazily
         // when the user actually enables expiry reminders in Settings.
@@ -372,10 +373,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let view = SettingsView(viewModel: viewModel) { [weak self] in
                 self?.settingsWindow?.close()
             }
-            settingsWindow = makeStyledWindow(view: view, width: 400, height: 540)
+            settingsWindow = makeStyledWindow(view: view, width: 520, height: 760)
         }
         settingsWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        applyDockVisibility()
     }
 
     @objc private func quit() {
@@ -393,6 +395,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         onboardingWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        applyDockVisibility()
+    }
+
+    // MARK: - Dock Visibility
+
+    static let dockVisibilityChangedNotification = Notification.Name("kubera.dockVisibilityChanged")
+
+    private func setupDockVisibilityObservers() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(windowWillCloseNotification(_:)),
+            name: NSWindow.willCloseNotification,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(applyDockVisibility),
+            name: AppDelegate.dockVisibilityChangedNotification,
+            object: nil
+        )
+    }
+
+    @objc private func windowWillCloseNotification(_ notification: Notification) {
+        // Treat the closing window as no longer visible when computing policy.
+        let closing = notification.object as? NSWindow
+        let othersVisible = [settingsWindow, onboardingWindow]
+            .compactMap { $0 }
+            .contains { $0 !== closing && $0.isVisible }
+        let shouldShow = othersVisible && DockVisibilityPreference.enabled
+        NSApp.setActivationPolicy(shouldShow ? .regular : .accessory)
+    }
+
+    @objc private func applyDockVisibility() {
+        let anyVisible = (settingsWindow?.isVisible ?? false) || (onboardingWindow?.isVisible ?? false)
+        let shouldShow = anyVisible && DockVisibilityPreference.enabled
+        NSApp.setActivationPolicy(shouldShow ? .regular : .accessory)
     }
 
     // MARK: - Window Factory
