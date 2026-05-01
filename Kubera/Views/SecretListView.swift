@@ -51,11 +51,7 @@ struct SecretListView: View {
         .sheet(item: $listVM.editingSecret) { secret in
             EditSecretSheet(
                 secret: secret,
-                value: $listVM.editValue,
-                comment: $listVM.editComment,
-                expiryDate: $listVM.editExpiryDate,
-                serviceURL: $listVM.editServiceURL,
-                isUpdating: listVM.isUpdating,
+                listVM: listVM,
                 onSave: {
                     Task { await listVM.saveEdit() }
                 },
@@ -620,16 +616,14 @@ struct TagChip: View {
 
 struct EditSecretSheet: View {
     let secret: SecretItem
-    @Binding var value: String
-    @Binding var comment: String
-    @Binding var expiryDate: Date?
-    @Binding var serviceURL: String
-    let isUpdating: Bool
+    @ObservedObject var listVM: SecretListViewModel
     let onSave: () -> Void
     let onCancel: () -> Void
 
+    @State private var isAddingTag = false
+
     private var parsedURL: URL? {
-        let trimmed = serviceURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = listVM.editServiceURL.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty,
               let url = URL(string: trimmed),
               let scheme = url.scheme?.lowercased(),
@@ -640,158 +634,382 @@ struct EditSecretSheet: View {
 
     var body: some View {
         ZStack {
-            Color.vault.bg.ignoresSafeArea()
+            VisualEffectBlur(material: .hudWindow, blendingMode: .behindWindow)
+                .ignoresSafeArea()
+            Color.vault.bg.opacity(0.72)
+                .ignoresSafeArea()
 
-            VStack(alignment: .leading, spacing: 18) {
-                // Header
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Edit Secret")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(Color.vault.text)
+            VStack(spacing: 0) {
+                header
+                    .padding(.horizontal, 24)
+                    .padding(.top, 22)
+                    .padding(.bottom, 16)
 
-                    Text(secret.key)
-                        .font(.system(size: 13, weight: .medium, design: .monospaced))
-                        .foregroundColor(Color.vault.accent)
-                }
+                VStack(spacing: 12) {
+                    VaultTextField(
+                        label: "Value",
+                        text: $listVM.editValue,
+                        isMonospaced: true,
+                        isSecure: true,
+                        placeholder: "Secret value"
+                    )
 
-                ScrollView(.vertical, showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: 14) {
-                        // Value field
-                        VaultTextField(
-                            label: "Value",
-                            text: $value,
-                            isMonospaced: true,
-                            isSecure: true,
-                            placeholder: "Secret value"
-                        )
+                    VaultTextEditor(
+                        label: "Comment",
+                        text: $listVM.editComment,
+                        placeholder: "Optional description...",
+                        lineCount: 3
+                    )
 
-                        // Comment field
-                        VaultTextEditor(
-                            label: "Comment",
-                            text: $comment,
-                            placeholder: "Optional description...",
-                            lineCount: 2
-                        )
-
-                        // Expiry
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("EXPIRES")
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundColor(Color.vault.textSecondary)
-                                .tracking(1.2)
-
-                            HStack(spacing: 8) {
-                                Image(systemName: "calendar")
-                                    .font(.system(size: 11))
-                                    .foregroundColor(Color.vault.textTertiary)
-
-                                if let date = expiryDate {
-                                    DatePicker(
-                                        "",
-                                        selection: Binding(
-                                            get: { date },
-                                            set: { expiryDate = $0 }
-                                        ),
-                                        displayedComponents: .date
-                                    )
-                                    .labelsHidden()
-                                    .datePickerStyle(.compact)
-
-                                    Spacer()
-
-                                    Button {
-                                        expiryDate = nil
-                                    } label: {
-                                        Image(systemName: "xmark.circle.fill")
-                                            .font(.system(size: 12))
-                                            .foregroundColor(Color.vault.textTertiary)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .help("Clear expiry")
-                                } else {
-                                    Button {
-                                        expiryDate = Calendar.current.date(byAdding: .day, value: 90, to: Date())
-                                    } label: {
-                                        Text("Set expiry date")
-                                            .font(.system(size: 12))
-                                            .foregroundColor(Color.vault.accent)
-                                    }
-                                    .buttonStyle(.plain)
-                                    Spacer()
-                                }
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(Color.vault.bg)
-                            .cornerRadius(8)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .stroke(Color.vault.border, lineWidth: 1)
-                            )
-                        }
-
-                        // Service URL
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("SERVICE URL")
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundColor(Color.vault.textSecondary)
-                                .tracking(1.2)
-
-                            HStack(spacing: 0) {
-                                Image(systemName: "link")
-                                    .font(.system(size: 11))
-                                    .foregroundColor(Color.vault.textTertiary)
-                                    .padding(.trailing, 8)
-
-                                TextField("https://platform.example.com/api-keys", text: $serviceURL)
-                                    .font(.system(size: 13))
-                                    .foregroundColor(Color.vault.text)
-                                    .textFieldStyle(.plain)
-
-                                if let url = parsedURL {
-                                    Button {
-                                        NSWorkspace.shared.open(url)
-                                    } label: {
-                                        Image(systemName: "arrow.up.right.square")
-                                            .font(.system(size: 12))
-                                            .foregroundColor(Color.vault.accent)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .help("Open in browser")
-                                }
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(Color.vault.bg)
-                            .cornerRadius(8)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .stroke(Color.vault.border, lineWidth: 1)
-                            )
-                        }
+                    HStack(alignment: .top, spacing: 10) {
+                        expirySection
+                        serviceURLSection
                     }
-                }
 
-                // Actions
-                HStack {
+                    tagSection
+                }
+                .padding(.horizontal, 24)
+
+                Spacer(minLength: 16)
+
+                footer
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 20)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
+        .frame(width: 460, height: 560)
+        .preferredColorScheme(.dark)
+    }
+
+    // MARK: - Header
+
+    private var header: some View {
+        let projectName = secret.projectName ?? AppConfiguration.load()?.projectName ?? "Project"
+        let envSlug = secret.environment ?? AppConfiguration.load()?.environment ?? AppConfiguration.defaultEnvironment
+        return HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Edit Secret")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundColor(Color.vault.text)
+
+                HStack(spacing: 6) {
+                    Text(secret.key)
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundColor(Color.vault.accent)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Text("·")
+                        .font(.system(size: 11))
+                        .foregroundColor(Color.vault.textTertiary)
+                    Text(projectName)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(Color.vault.textSecondary)
+                        .lineLimit(1)
+                    Text("·")
+                        .font(.system(size: 11))
+                        .foregroundColor(Color.vault.textTertiary)
+                    Text(envSlug)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(Color.vault.textSecondary)
+                        .lineLimit(1)
+                }
+            }
+            Spacer()
+        }
+    }
+
+    // MARK: - Expiry & Service URL
+
+    private var expirySection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("EXPIRES")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(Color.vault.textSecondary)
+                .tracking(1.2)
+
+            HStack(spacing: 8) {
+                Image(systemName: "calendar")
+                    .font(.system(size: 11))
+                    .foregroundColor(Color.vault.textTertiary)
+
+                if let date = listVM.editExpiryDate {
+                    DatePicker(
+                        "",
+                        selection: Binding(
+                            get: { date },
+                            set: { listVM.editExpiryDate = $0 }
+                        ),
+                        displayedComponents: .date
+                    )
+                    .labelsHidden()
+                    .datePickerStyle(.compact)
+
                     Spacer()
 
-                    VaultButton(title: "Cancel", style: .secondary) {
-                        onCancel()
+                    Button {
+                        listVM.editExpiryDate = nil
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 12))
+                            .foregroundColor(Color.vault.textTertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Clear expiry")
+                } else {
+                    Button {
+                        listVM.editExpiryDate = Calendar.current.date(byAdding: .day, value: 90, to: Date())
+                    } label: {
+                        Text("Set expiry date")
+                            .font(.system(size: 12))
+                            .foregroundColor(Color.vault.accent)
+                    }
+                    .buttonStyle(.plain)
+                    Spacer()
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Color.vault.bg)
+            .cornerRadius(8)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.vault.border, lineWidth: 1)
+            )
+        }
+    }
+
+    private var serviceURLSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("SERVICE URL")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(Color.vault.textSecondary)
+                .tracking(1.2)
+
+            HStack(spacing: 0) {
+                Image(systemName: "link")
+                    .font(.system(size: 11))
+                    .foregroundColor(Color.vault.textTertiary)
+                    .padding(.trailing, 8)
+
+                TextField("https://platform.example.com/api-keys", text: $listVM.editServiceURL)
+                    .font(.system(size: 13))
+                    .foregroundColor(Color.vault.text)
+                    .textFieldStyle(.plain)
+
+                if let url = parsedURL {
+                    Button {
+                        NSWorkspace.shared.open(url)
+                    } label: {
+                        Image(systemName: "arrow.up.right.square")
+                            .font(.system(size: 12))
+                            .foregroundColor(Color.vault.accent)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Open in browser")
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Color.vault.bg)
+            .cornerRadius(8)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.vault.border, lineWidth: 1)
+            )
+        }
+    }
+
+    // MARK: - Tags
+
+    private var tagSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("TAGS")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(Color.vault.textSecondary)
+                .tracking(1.2)
+
+            if listVM.editIsLoadingTags && listVM.editTags.isEmpty {
+                HStack(spacing: 6) {
+                    ProgressView().scaleEffect(0.5).frame(width: 12, height: 12)
+                    Text("Loading...")
+                        .font(.system(size: 11))
+                        .foregroundColor(Color.vault.textTertiary)
+                }
+            } else {
+                FlowLayout(spacing: 6, rowSpacing: 6) {
+                    ForEach(listVM.editTags) { tag in
+                        tagChip(tag)
                     }
 
-                    VaultButton(
-                        title: isUpdating ? "Saving..." : "Save Changes",
-                        style: .primary,
-                        isLoading: isUpdating,
-                        isDisabled: value.isEmpty
-                    ) {
-                        onSave()
+                    ForEach(listVM.editPendingTagNames, id: \.self) { name in
+                        pendingChip(name)
+                    }
+
+                    if isAddingTag {
+                        addTagField
+                    } else {
+                        Button {
+                            withAnimation(.spring(response: 0.2)) {
+                                isAddingTag = true
+                            }
+                        } label: {
+                            HStack(spacing: 3) {
+                                Image(systemName: "plus")
+                                    .font(.system(size: 9, weight: .bold))
+                                Text("Add")
+                                    .font(.system(size: 11, weight: .medium))
+                            }
+                            .foregroundColor(Color.vault.textSecondary)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 5)
+                            .background(Color.vault.surface)
+                            .cornerRadius(5)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 5)
+                                    .stroke(Color.vault.border, lineWidth: 1)
+                            )
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
             }
-            .padding(28)
         }
-        .frame(width: 460, height: 560)
+    }
+
+    private var addTagField: some View {
+        HStack(spacing: 4) {
+            BackspaceTextField(
+                text: $listVM.editNewTagName,
+                placeholder: "Tag name...",
+                onBackspaceEmpty: {
+                    if !listVM.editPendingTagNames.isEmpty {
+                        withAnimation(.spring(response: 0.2)) {
+                            _ = listVM.editPendingTagNames.removeLast()
+                        }
+                    } else {
+                        withAnimation(.spring(response: 0.2)) {
+                            isAddingTag = false
+                        }
+                    }
+                },
+                onSubmit: {
+                    listVM.queueEditTag()
+                },
+                onSeparator: {
+                    listVM.queueEditTag()
+                }
+            )
+            .frame(width: 90)
+
+            Button {
+                listVM.editNewTagName = ""
+                withAnimation(.spring(response: 0.2)) {
+                    isAddingTag = false
+                }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundColor(Color.vault.textTertiary)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(Color.vault.bg)
+        .cornerRadius(5)
+        .overlay(
+            RoundedRectangle(cornerRadius: 5)
+                .stroke(Color.vault.accent.opacity(0.4), lineWidth: 1)
+        )
+        .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .leading)))
+    }
+
+    private func tagChip(_ tag: InfisicalTag) -> some View {
+        let isSelected = listVM.editSelectedTagIds.contains(tag.id)
+        return Button {
+            withAnimation(.spring(response: 0.2)) {
+                listVM.toggleEditTag(tag)
+            }
+        } label: {
+            Text(tag.displayName)
+                .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
+                .lineLimit(1)
+                .foregroundColor(isSelected ? Color.vault.bg : Color.vault.textSecondary)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 5)
+                .background(isSelected ? Color.vault.accent : Color.vault.surface)
+                .cornerRadius(5)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 5)
+                        .stroke(isSelected ? Color.vault.accent : Color.vault.border, lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func pendingChip(_ name: String) -> some View {
+        HStack(spacing: 3) {
+            Text(name)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(Color.vault.accent)
+            Button {
+                withAnimation(.spring(response: 0.2)) {
+                    listVM.removeEditPendingTag(name)
+                }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 7, weight: .bold))
+                    .foregroundColor(Color.vault.accent.opacity(0.5))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(Color.vault.accentSoft)
+        .cornerRadius(5)
+        .overlay(
+            RoundedRectangle(cornerRadius: 5)
+                .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                .foregroundColor(Color.vault.accent.opacity(0.3))
+        )
+    }
+
+    // MARK: - Footer
+
+    private var isDirty: Bool {
+        let originalURL = secret.serviceURL?.absoluteString ?? ""
+        let originalTagIds = Set((secret.tags ?? []).map(\.id))
+        return listVM.editValue != secret.value
+            || listVM.editComment != (secret.comment ?? "")
+            || listVM.editExpiryDate != secret.expiryDate
+            || listVM.editServiceURL.trimmingCharacters(in: .whitespacesAndNewlines) != originalURL
+            || listVM.editSelectedTagIds != originalTagIds
+            || !listVM.editPendingTagNames.isEmpty
+    }
+
+    private var footer: some View {
+        HStack(spacing: 10) {
+            Text("⌘↵ to save")
+                .font(.system(size: 10))
+                .foregroundColor(Color.vault.textTertiary)
+
+            Spacer()
+
+            VaultButton(title: "Cancel", style: .ghost) {
+                onCancel()
+            }
+            .keyboardShortcut(.cancelAction)
+
+            VaultButton(
+                title: listVM.isUpdating ? "Saving..." : "Save Changes",
+                style: .primary,
+                isLoading: listVM.isUpdating,
+                isDisabled: listVM.editValue.isEmpty || !isDirty
+            ) {
+                onSave()
+            }
+            .keyboardShortcut(.defaultAction)
+        }
     }
 }

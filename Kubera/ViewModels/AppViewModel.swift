@@ -220,7 +220,8 @@ final class AppViewModel: ObservableObject {
         newValue: String,
         newComment: String,
         newExpiry: Date?,
-        newServiceURL: String?
+        newServiceURL: String?,
+        newTagIds: [String]? = nil
     ) async -> Bool {
         guard let config = AppConfiguration.load() else { return false }
         // In all-envs mode the per-secret env is the source of truth.
@@ -233,6 +234,8 @@ final class AppViewModel: ObservableObject {
                 name: secret.key,
                 value: newValue,
                 comment: newComment,
+                tagIds: newTagIds ?? [],
+                tagsExplicit: newTagIds != nil,
                 expiryDate: newExpiry,
                 serviceURL: newServiceURL,
                 metadataExplicit: true,

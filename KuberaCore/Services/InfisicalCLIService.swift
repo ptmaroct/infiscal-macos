@@ -230,6 +230,7 @@ public struct InfisicalCLIService {
         value: String,
         comment: String = "",
         tagIds: [String] = [],
+        tagsExplicit: Bool = false,
         expiryDate: Date? = nil,
         serviceURL: String? = nil,
         metadataExplicit: Bool = true,
@@ -254,7 +255,11 @@ public struct InfisicalCLIService {
             "secretValue": value
         ]
         if !comment.isEmpty { body["secretComment"] = comment }
-        if !tagIds.isEmpty { body["tagIds"] = tagIds }
+        if tagsExplicit {
+            body["tagIds"] = tagIds
+        } else if !tagIds.isEmpty {
+            body["tagIds"] = tagIds
+        }
         if metadataExplicit {
             body["secretMetadata"] = buildSecretMetadataPayload(
                 expiryDate: expiryDate, serviceURL: serviceURL

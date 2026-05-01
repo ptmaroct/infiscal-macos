@@ -14,6 +14,11 @@ final class SecretListViewModel: ObservableObject {
     @Published var editComment: String = ""
     @Published var editExpiryDate: Date? = nil
     @Published var editServiceURL: String = ""
+    @Published var editTags: [InfisicalTag] = []
+    @Published var editSelectedTagIds: Set<String> = []
+    @Published var editPendingTagNames: [String] = []
+    @Published var editNewTagName: String = ""
+    @Published var editIsLoadingTags: Bool = false
     @Published var deletingSecret: SecretItem?
     @Published var isUpdating: Bool = false
     @Published var isDeleting: Bool = false
@@ -141,6 +146,52 @@ final class SecretListViewModel: ObservableObject {
         editComment = secret.comment ?? ""
         editExpiryDate = secret.expiryDate
         editServiceURL = secret.serviceURL?.absoluteString ?? ""
+        editSelectedTagIds = Set((secret.tags ?? []).map(\.id))
+        editPendingTagNames = []
+        editNewTagName = ""
+
+        let projectId = secret.projectId ?? AppConfiguration.load()?.projectId
+        guard let projectId, !projectId.isEmpty else {
+            editTags = []
+            return
+        }
+        let cached = ProjectCache.shared.cachedTags(for: projectId)
+        editTags = cached
+        if cached.isEmpty { editIsLoadingTags = true }
+        Task { [weak self] in
+            let fresh = await ProjectCache.shared.fetchTags(for: projectId)
+            guard let self else { return }
+            self.editTags = fresh
+            self.editIsLoadingTags = false
+        }
+    }
+
+    func toggleEditTag(_ tag: InfisicalTag) {
+        if editSelectedTagIds.contains(tag.id) {
+            editSelectedTagIds.remove(tag.id)
+        } else {
+            editSelectedTagIds.insert(tag.id)
+        }
+    }
+
+    func queueEditTag() {
+        let name = editNewTagName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        if let existing = editTags.first(where: { $0.displayName.lowercased() == name.lowercased() }) {
+            editSelectedTagIds.insert(existing.id)
+            editNewTagName = ""
+            return
+        }
+        if editPendingTagNames.contains(where: { $0.lowercased() == name.lowercased() }) {
+            editNewTagName = ""
+            return
+        }
+        editPendingTagNames.append(name)
+        editNewTagName = ""
+    }
+
+    func removeEditPendingTag(_ name: String) {
+        editPendingTagNames.removeAll { $0 == name }
     }
 
     func saveEdit() async -> Bool {
@@ -148,12 +199,39 @@ final class SecretListViewModel: ObservableObject {
         isUpdating = true
         let trimmedURL = editServiceURL.trimmingCharacters(in: .whitespacesAndNewlines)
         let urlArg: String? = trimmedURL.isEmpty ? nil : trimmedURL
+
+        // Materialize any pending tag names into real tags first.
+        let projectId = secret.projectId ?? AppConfiguration.load()?.projectId ?? ""
+        let baseURL = AppConfiguration.load()?.baseURL ?? AppConfiguration.defaultBaseURL
+        var allTagIds = editSelectedTagIds
+        if !editPendingTagNames.isEmpty, !projectId.isEmpty {
+            let names = editPendingTagNames
+            await withTaskGroup(of: InfisicalTag?.self) { group in
+                for name in names {
+                    group.addTask {
+                        try? await InfisicalCLIService.createTag(
+                            name: name, projectId: projectId, baseURL: baseURL
+                        )
+                    }
+                }
+                for await result in group {
+                    if let newTag = result {
+                        allTagIds.insert(newTag.id)
+                        editTags.append(newTag)
+                        ProjectCache.shared.addTag(newTag, for: projectId)
+                    }
+                }
+            }
+            editPendingTagNames = []
+        }
+
         let success = await appViewModel.updateSecret(
             secret,
             newValue: editValue,
             newComment: editComment,
             newExpiry: editExpiryDate,
-            newServiceURL: urlArg
+            newServiceURL: urlArg,
+            newTagIds: Array(allTagIds)
         )
         isUpdating = false
         if success {
