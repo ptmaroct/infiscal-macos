@@ -391,7 +391,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSear
             settingsWindow = makeStyledWindow(
                 view: view,
                 width: SettingsView.windowWidth,
-                height: SettingsView.windowHeight
+                height: SettingsView.windowHeight,
+                resizable: true
+            )
+            settingsWindow?.minSize = NSSize(
+                width: SettingsView.windowWidth,
+                height: 480
             )
         }
         settingsWindow?.makeKeyAndOrderFront(nil)
@@ -454,11 +459,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSear
 
     // MARK: - Window Factory
 
-    private func makeStyledWindow<V: View>(view: V, width: CGFloat, height: CGFloat) -> NSWindow {
+    private func makeStyledWindow<V: View>(
+        view: V, width: CGFloat, height: CGFloat, resizable: Bool = false
+    ) -> NSWindow {
         let hostingView = NSHostingView(rootView: view)
+        var mask: NSWindow.StyleMask = [.titled, .closable, .fullSizeContentView]
+        if resizable { mask.insert(.resizable) }
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: width, height: height),
-            styleMask: [.titled, .closable, .fullSizeContentView],
+            styleMask: mask,
             backing: .buffered,
             defer: false
         )

@@ -4,7 +4,7 @@ import Carbon
 
 struct SettingsView: View {
     static let windowWidth: CGFloat = 760
-    static let windowHeight: CGFloat = 500
+    static let windowHeight: CGFloat = 640
 
     @ObservedObject var viewModel: AppViewModel
     let onDismiss: () -> Void
@@ -112,6 +112,10 @@ struct SettingsView: View {
                 } else {
                     // Compact two-column settings panel. Cards size to content
                     // and notes wrap so sparse cards do not stretch unevenly.
+                    // Wrapped in ScrollView so the window can shrink without
+                    // truncating the lower cards (Storage card pushes total
+                    // height past the original 500px on standard layouts).
+                    ScrollView(.vertical, showsIndicators: false) {
                     HStack(alignment: .top, spacing: columnSpacing) {
                         VStack(spacing: 14) {
                             // Project & Environment card
@@ -451,11 +455,11 @@ struct SettingsView: View {
                         .padding(.horizontal, horizontalPadding)
                         .padding(.top, 14)
                         .padding(.bottom, 16)
-
+                    }
                 }
             }
         }
-        .frame(width: Self.windowWidth, height: Self.windowHeight)
+        .frame(minWidth: Self.windowWidth, minHeight: Self.windowHeight)
         .preferredColorScheme(.dark)
         .onAppear {
             loadData()
