@@ -2,15 +2,15 @@
 import PackageDescription
 
 let package = Package(
-    name: "InfisicalMenu",
+    name: "Kubera",
     platforms: [
         .macOS(.v13)
     ],
     targets: [
         .executableTarget(
-            name: "InfisicalMenu",
-            path: "InfisicalMenu",
-            exclude: ["Info.plist", "InfisicalMenu.entitlements"],
+            name: "Kubera",
+            path: "Kubera",
+            exclude: ["Info.plist", "Kubera.entitlements"],
             resources: [.copy("Assets.xcassets")]
         ),
     ]

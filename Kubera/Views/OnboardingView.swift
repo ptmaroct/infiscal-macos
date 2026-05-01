@@ -77,7 +77,7 @@ struct OnboardingView: View {
             PulsingKeyIcon()
                 .padding(.bottom, 28)
 
-            Text("InfisicalMenu")
+            Text("Kubera")
                 .font(.system(size: 28, weight: .bold, design: .rounded))
                 .foregroundColor(Color.vault.text)
                 .padding(.bottom, 8)
@@ -141,7 +141,9 @@ struct OnboardingView: View {
                     icon: "terminal",
                     title: "CLI Not Found",
                     subtitle: "Install the Infisical CLI to continue",
-                    command: "brew install infisical"
+                    command: "brew install infisical",
+                    linkLabel: "Don't have Homebrew?",
+                    linkURL: "https://brew.sh"
                 )
 
             case .notLoggedIn:
@@ -149,7 +151,9 @@ struct OnboardingView: View {
                     icon: "person.crop.circle.badge.xmark",
                     title: "Not Logged In",
                     subtitle: "Authenticate with Infisical first",
-                    command: "infisical login"
+                    command: "infisical login",
+                    linkLabel: "Need an account? Sign up →",
+                    linkURL: "https://infisical.com/"
                 )
             }
 
@@ -158,7 +162,7 @@ struct OnboardingView: View {
         .padding(.horizontal, 40)
     }
 
-    private func cliErrorState(icon: String, title: String, subtitle: String, command: String) -> some View {
+    private func cliErrorState(icon: String, title: String, subtitle: String, command: String, linkLabel: String? = nil, linkURL: String? = nil) -> some View {
         VStack(spacing: 20) {
             ZStack {
                 Circle()
@@ -192,6 +196,17 @@ struct OnboardingView: View {
             }
             .padding(.horizontal, 20)
 
+            if let label = linkLabel, let urlString = linkURL, let url = URL(string: urlString) {
+                Button {
+                    NSWorkspace.shared.open(url)
+                } label: {
+                    Text(label)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(Color.vault.accent)
+                }
+                .buttonStyle(.plain)
+            }
+
             VaultButton(title: "Re-check", style: .secondary) {
                 Task { await onboarding.checkCLI() }
             }
@@ -202,31 +217,32 @@ struct OnboardingView: View {
 
     private var configureStep: some View {
         VStack(spacing: 0) {
-            VStack(spacing: 4) {
+            VStack(spacing: 6) {
                 Text("Select Project")
-                    .font(.system(size: 20, weight: .bold))
+                    .font(.system(size: 22, weight: .bold))
                     .foregroundColor(Color.vault.text)
 
                 Text("Choose where to pull secrets from")
                     .font(.system(size: 12))
                     .foregroundColor(Color.vault.textSecondary)
             }
-            .padding(.top, 28)
-            .padding(.bottom, 20)
+            .padding(.top, 24)
+            .padding(.bottom, 22)
 
             if onboarding.isLoadingData {
                 Spacer()
                 ProgressView()
                 Spacer()
             } else {
-                VStack(spacing: 14) {
+                VStack(spacing: 16) {
                     // Org picker (if multiple)
                     if onboarding.organizations.count > 1 {
                         VaultPicker(
                             label: "Organization",
                             selection: $onboarding.selectedOrg,
                             options: onboarding.organizations,
-                            displayName: { $0.name }
+                            displayName: { $0.name },
+                            icon: "building.2.fill"
                         )
                         .onChange(of: onboarding.selectedOrg) { _ in
                             Task { await onboarding.fetchProjects() }
@@ -237,15 +253,15 @@ struct OnboardingView: View {
                         label: "Project",
                         selection: $onboarding.selectedProject,
                         options: onboarding.projects,
-                        displayName: { $0.name }
+                        displayName: { $0.name },
+                        icon: "folder.fill"
                     )
                     .onChange(of: onboarding.selectedProject) { _ in
                         onboarding.onProjectSelected()
                     }
 
                     if !onboarding.environments.isEmpty {
-                        // Environment as segmented pills
-                        VStack(alignment: .leading, spacing: 6) {
+                        VStack(alignment: .leading, spacing: 8) {
                             Text("ENVIRONMENT")
                                 .font(.system(size: 10, weight: .semibold))
                                 .foregroundColor(Color.vault.textSecondary)
@@ -309,17 +325,22 @@ struct OnboardingView: View {
                 onboarding.selectedEnvironment = env
             }
         } label: {
-            Text(env.name)
-                .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
-                .foregroundColor(isSelected ? Color.vault.bg : Color.vault.textSecondary)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 6)
-                .background(isSelected ? Color.vault.accent : Color.vault.bg)
-                .cornerRadius(6)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 6)
-                        .stroke(isSelected ? Color.vault.accent : Color.vault.border, lineWidth: 1)
-                )
+            HStack(spacing: 5) {
+                Circle()
+                    .fill(isSelected ? Color.vault.bg : Color.vault.accent.opacity(0.6))
+                    .frame(width: 6, height: 6)
+                Text(env.name)
+                    .font(.system(size: 12, weight: isSelected ? .semibold : .medium))
+                    .foregroundColor(isSelected ? Color.vault.bg : Color.vault.text)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(isSelected ? Color.vault.accent : Color.vault.bg)
+            .cornerRadius(8)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(isSelected ? Color.vault.accent : Color.vault.border, lineWidth: 1)
+            )
         }
         .buttonStyle(.plain)
     }

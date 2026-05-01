@@ -258,7 +258,7 @@ struct SettingsView: View {
                                                     .font(.system(size: 9))
                                                 Text(touchIDTimeout == .immediately
                                                     ? "Touch ID required every time you open the menu"
-                                                    : "Touch ID required after \(touchIDTimeout.displayName.lowercased()) of inactivity")
+                                                    : "Touch ID required \(touchIDTimeout.displayName.lowercased()) of inactivity")
                                                     .font(.system(size: 10))
                                             }
                                             .foregroundColor(.white.opacity(0.35))
@@ -276,7 +276,7 @@ struct SettingsView: View {
                                         icon: "info.circle.fill",
                                         label: "Version"
                                     ) {
-                                        Text("1.0.0")
+                                        Text("1.2.0")
                                             .font(.system(size: 12))
                                             .foregroundColor(.white.opacity(0.4))
                                     }
@@ -303,6 +303,33 @@ struct SettingsView: View {
                                         }
                                         .buttonStyle(.plain)
                                     }
+
+                                    Divider().opacity(0.2)
+
+                                    HStack(spacing: 4) {
+                                        Text("Made by Anuj Sharma")
+                                            .font(.system(size: 11))
+                                            .foregroundColor(.white.opacity(0.5))
+                                        Text("·")
+                                            .font(.system(size: 11))
+                                            .foregroundColor(.white.opacity(0.3))
+                                        Button {
+                                            if let url = URL(string: "https://x.com/waahbete") {
+                                                NSWorkspace.shared.open(url)
+                                            }
+                                        } label: {
+                                            HStack(spacing: 3) {
+                                                Text("@waahbete")
+                                                    .font(.system(size: 11, weight: .medium))
+                                                    .foregroundColor(Color.vault.accent)
+                                                Image(systemName: "arrow.up.right")
+                                                    .font(.system(size: 8, weight: .semibold))
+                                                    .foregroundColor(Color.vault.accent.opacity(0.6))
+                                            }
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .center)
                                 }
                             }
                         }

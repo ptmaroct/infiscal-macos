@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct InfisicalMenuApp: App {
+struct KuberaApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {

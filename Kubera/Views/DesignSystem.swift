@@ -101,12 +101,23 @@ struct VaultPicker<T: Hashable & Identifiable>: View where T: CustomStringConver
     @Binding var selection: T?
     let options: [T]
     let displayName: (T) -> String
+    var icon: String = "folder.fill"
 
-    init(label: String, selection: Binding<T?>, options: [T], displayName: @escaping (T) -> String) {
+    @State private var isOpen = false
+    @State private var search = ""
+    @State private var hoverID: AnyHashable?
+
+    init(label: String, selection: Binding<T?>, options: [T], displayName: @escaping (T) -> String, icon: String = "folder.fill") {
         self.label = label
         self._selection = selection
         self.options = options
         self.displayName = displayName
+        self.icon = icon
+    }
+
+    private var filtered: [T] {
+        guard !search.isEmpty else { return options }
+        return options.filter { displayName($0).localizedCaseInsensitiveContains(search) }
     }
 
     var body: some View {
@@ -116,43 +127,131 @@ struct VaultPicker<T: Hashable & Identifiable>: View where T: CustomStringConver
                 .foregroundColor(Color.vault.textSecondary)
                 .tracking(1.2)
 
-            Menu {
-                ForEach(options) { option in
-                    Button {
-                        selection = option
-                    } label: {
-                        HStack {
-                            Text(displayName(option))
-                            if selection?.id == option.id {
-                                Spacer()
-                                Image(systemName: "checkmark")
-                            }
-                        }
-                    }
+            Button {
+                withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+                    isOpen.toggle()
                 }
             } label: {
-                HStack {
-                    Text(selection.map { displayName($0) } ?? "Select...")
-                        .font(.system(size: 13))
-                        .foregroundColor(selection != nil ? Color.vault.text : Color.vault.textTertiary)
+                HStack(spacing: 10) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(Color.vault.accentSoft)
+                            .frame(width: 26, height: 26)
+                        Image(systemName: icon)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(Color.vault.accent)
+                    }
+
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(selection.map { displayName($0) } ?? "Select \(label.lowercased())")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(selection != nil ? Color.vault.text : Color.vault.textTertiary)
+                            .lineLimit(1)
+
+                        if selection != nil {
+                            Text("Tap to change")
+                                .font(.system(size: 9))
+                                .foregroundColor(Color.vault.textTertiary)
+                        }
+                    }
 
                     Spacer()
 
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(Color.vault.textTertiary)
+                    Image(systemName: isOpen ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(Color.vault.textSecondary)
+                        .animation(.easeInOut(duration: 0.18), value: isOpen)
                 }
-                .padding(.horizontal, 12)
+                .padding(.horizontal, 10)
                 .padding(.vertical, 8)
                 .background(Color.vault.bg)
-                .cornerRadius(8)
+                .cornerRadius(10)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color.vault.border, lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(isOpen ? Color.vault.borderFocus : Color.vault.border, lineWidth: 1)
                 )
             }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
+            .buttonStyle(.plain)
+            .popover(isPresented: $isOpen, arrowEdge: .bottom) {
+                dropdownContent
+            }
+        }
+    }
+
+    private var dropdownContent: some View {
+        VStack(spacing: 0) {
+            if options.count > 5 {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 11))
+                        .foregroundColor(Color.vault.textTertiary)
+                    TextField("Search…", text: $search)
+                        .font(.system(size: 12))
+                        .textFieldStyle(.plain)
+                        .foregroundColor(Color.vault.text)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+
+                Divider().opacity(0.15)
+            }
+
+            ScrollView(.vertical, showsIndicators: false) {
+                LazyVStack(spacing: 2) {
+                    if filtered.isEmpty {
+                        Text("No matches")
+                            .font(.system(size: 12))
+                            .foregroundColor(Color.vault.textTertiary)
+                            .padding(.vertical, 18)
+                    } else {
+                        ForEach(filtered) { option in
+                            row(option)
+                        }
+                    }
+                }
+                .padding(6)
+            }
+            .frame(maxHeight: 240)
+        }
+        .frame(width: 280)
+        .background(Color.vault.surface)
+        .preferredColorScheme(.dark)
+    }
+
+    private func row(_ option: T) -> some View {
+        let isSelected = selection?.id == option.id
+        let isHovered = hoverID == AnyHashable(option.id)
+        return Button {
+            selection = option
+            withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+                isOpen = false
+                search = ""
+            }
+        } label: {
+            HStack(spacing: 10) {
+                Text(displayName(option))
+                    .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                    .foregroundColor(isSelected ? Color.vault.accent : Color.vault.text)
+                    .lineLimit(1)
+
+                Spacer()
+
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(Color.vault.accent)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(isSelected ? Color.vault.accentSoft : (isHovered ? Color.vault.surfaceHover : Color.clear))
+            )
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            hoverID = hovering ? AnyHashable(option.id) : nil
         }
     }
 }

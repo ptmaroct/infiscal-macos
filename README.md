@@ -1,4 +1,6 @@
-# InfisicalMenu
+# Kubera
+
+> *Keeper of secrets — named for the Vedic god of wealth.*
 
 A native macOS menubar app for quickly searching and managing secrets via the [Infisical](https://infisical.com) CLI.
 
@@ -31,26 +33,57 @@ A native macOS menubar app for quickly searching and managing secrets via the [I
 - **CLI-powered** — uses your existing `infisical` CLI session, zero credential management
 - **Dark vault UI** — custom dark theme with amber accents and smooth animations
 
-## Installation
+## Install
 
-Download the latest `.dmg` from [Releases](https://github.com/ptmaroct/infiscal-macos/releases).
-
-### Prerequisites
-
-- macOS 13 (Ventura) or later
-- [Infisical CLI](https://infisical.com/docs/cli/overview) installed and logged in
+### One-liner (recommended)
 
 ```bash
-brew install infisical
-infisical login
+curl -fsSL https://raw.githubusercontent.com/ptmaroct/infiscal-macos/main/install.sh | bash
 ```
+
+Installs the Infisical CLI (via Homebrew) if missing, downloads the latest Kubera DMG, drops it into `/Applications`, and strips the macOS quarantine flag so the unsigned app launches cleanly.
+
+### Homebrew
+
+```bash
+brew tap ptmaroct/kubera
+brew install --cask kubera
+```
+
+The cask declares `infisical` as a dependency, so the CLI is pulled in automatically.
+
+### Manual download
+
+1. Grab the latest `Kubera.dmg` from [Releases](https://github.com/ptmaroct/infiscal-macos/releases).
+2. Mount it and drag `Kubera.app` to `/Applications`.
+3. Because the build is currently unsigned, run this once to clear Gatekeeper's "App is damaged" warning:
+
+   ```bash
+   xattr -dr com.apple.quarantine /Applications/Kubera.app
+   ```
+
+4. Install the Infisical CLI separately: `brew install infisical`.
+
+### After install
+
+```bash
+infisical login   # one-time auth
+open -a Kubera    # or launch from Spotlight
+```
+
+If you want the global `Cmd + Shift + K` hotkey: **System Settings → Privacy & Security → Accessibility → enable Kubera**.
+
+### Requirements
+
+- macOS 13 (Ventura) or later
+- [Infisical CLI](https://infisical.com/docs/cli/overview) (installed automatically by both quick-install paths)
 
 ### Build from source
 
 ```bash
 swift build
 bash scripts/bundle.sh
-open build/InfisicalMenu.app
+open build/Kubera.app
 ```
 
 ## First Launch
@@ -77,8 +110,8 @@ Clipboard auto-clears after 30 seconds for security.
 ## Project Structure
 
 ```
-InfisicalMenu/
-├── InfisicalMenuApp.swift          # App entry point
+Kubera/
+├── KuberaApp.swift          # App entry point
 ├── AppDelegate.swift               # NSStatusBar, NSMenu, window management
 ├── Models/
 │   ├── Secret.swift                # Secret model with version, tags, timestamps
@@ -103,6 +136,30 @@ InfisicalMenu/
     ├── KeyboardShortcutNames.swift # Global hotkey (Carbon API)
     └── Constants.swift
 ```
+
+## Troubleshooting
+
+**"Kubera is damaged and can't be opened"** — the build is unsigned. Run:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Kubera.app
+```
+
+The curl and Homebrew installers do this automatically; you only need it for manual DMG installs.
+
+**Settings stuck on "Loading…"** — your Infisical CLI session is missing or expired. Run `infisical login` and reopen Settings.
+
+**Global hotkey (`Cmd + Shift + K`) does nothing** — grant Accessibility access in **System Settings → Privacy & Security → Accessibility**.
+
+**Custom Infisical instance (EU / self-hosted)** — set the CLI domain first:
+
+```bash
+infisical login --domain https://eu.infisical.com   # or your self-hosted URL
+```
+
+## Why is the macOS sandbox disabled?
+
+Kubera spawns the local `infisical` binary as a subprocess to talk to your account. The macOS app sandbox blocks arbitrary subprocess execution, so it's explicitly disabled in `Kubera.entitlements`. Nothing leaves your machine — Kubera only talks to Infisical through your already-authenticated CLI session.
 
 ## License
 
