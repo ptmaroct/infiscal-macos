@@ -104,4 +104,15 @@ final class ProjectCache {
         tagsCache = [:]
         tagsLastFetchedAt = [:]
     }
+
+    /// Force the next `fetchProjects()` call to bypass the staleness window.
+    func invalidateProjects() {
+        lastProjectsFetchedAt = nil
+    }
+}
+
+extension Notification.Name {
+    static let kuberaConnectInfisicalRequested = Notification.Name(
+        "kubera.connectInfisicalRequested"
+    )
 }

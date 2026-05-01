@@ -39,6 +39,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSear
         if !viewModel.isConfigured {
             showOnboarding()
         }
+
+        NotificationCenter.default.addObserver(
+            forName: .kuberaConnectInfisicalRequested,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.showOnboarding(forceBackend: .infisical) }
+        }
     }
 
     // MARK: - Status Item
@@ -109,10 +117,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSear
         addItem.target = self
         menu.addItem(addItem)
 
-        // Open Dashboard
-        let dashboardItem = NSMenuItem(title: "Open Infisical Dashboard", action: #selector(openDashboard), keyEquivalent: "d")
-        dashboardItem.target = self
-        menu.addItem(dashboardItem)
+        // Open Dashboard — only when running against Infisical.
+        if !(AppConfiguration.load()?.isLocalBackend ?? false) {
+            let dashboardItem = NSMenuItem(title: "Open Infisical Dashboard", action: #selector(openDashboard), keyEquivalent: "d")
+            dashboardItem.target = self
+            menu.addItem(dashboardItem)
+        }
 
         menu.addItem(NSMenuItem.separator())
 
@@ -192,12 +202,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSear
             emptyItem.isEnabled = false
             menu.insertItem(emptyItem, at: secretsRangeStart)
         } else {
-            let isAllEnvs = AppConfiguration.load()?.isAllEnvironments ?? false
+            // Always render an env badge after the key when the secret carries
+            // an env tag — gives the user immediate context regardless of whether
+            // they're in all-envs mode.
             for (index, secret) in displaySecrets.enumerated() {
                 let item = NSMenuItem(title: secret.key, action: #selector(copySecret(_:)), keyEquivalent: "")
                 item.target = self
                 item.tag = index
-                if isAllEnvs, let env = secret.environment {
+                if let env = secret.environment, !env.isEmpty,
+                   env != AppConfiguration.allEnvironmentsSentinel {
                     item.attributedTitle = makeMenuTitle(key: secret.key, env: env)
                     item.toolTip = "Copy \(secret.key) (\(env))"
                 } else {
@@ -369,7 +382,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSear
             let view = AddSecretView(viewModel: viewModel) { [weak self] in
                 self?.addSecretWindow?.close()
             }
-            addSecretWindow = makeStyledWindow(view: view, width: 500, height: 700)
+            addSecretWindow = makeStyledWindow(view: view, width: 500, height: 700, autoFit: true)
         }
         addSecretWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -392,11 +405,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSear
                 view: view,
                 width: SettingsView.windowWidth,
                 height: SettingsView.windowHeight,
-                resizable: true
-            )
-            settingsWindow?.minSize = NSSize(
-                width: SettingsView.windowWidth,
-                height: 480
+                resizable: true,
+                autoFit: true
             )
         }
         settingsWindow?.makeKeyAndOrderFront(nil)
@@ -410,9 +420,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSear
 
     // MARK: - Onboarding
 
-    func showOnboarding() {
+    func showOnboarding(forceBackend: OnboardingViewModel.Backend? = nil) {
         if onboardingWindow == nil || !onboardingWindow!.isVisible {
-            let view = OnboardingView(viewModel: viewModel) { [weak self] in
+            let view = OnboardingView(viewModel: viewModel, forceBackend: forceBackend) { [weak self] in
                 self?.onboardingWindow?.close()
             }
             onboardingWindow = makeStyledWindow(view: view, width: 500, height: 460)
@@ -460,9 +470,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSear
     // MARK: - Window Factory
 
     private func makeStyledWindow<V: View>(
-        view: V, width: CGFloat, height: CGFloat, resizable: Bool = false
+        view: V, width: CGFloat, height: CGFloat,
+        resizable: Bool = false, autoFit: Bool = false
     ) -> NSWindow {
         let hostingView = NSHostingView(rootView: view)
+        if autoFit {
+            // Make the host report its SwiftUI-preferred size as
+            // intrinsicContentSize. Combined with `.fixedSize` in the SwiftUI
+            // body this auto-sizes the window to its content.
+            hostingView.sizingOptions = [.preferredContentSize]
+        }
         var mask: NSWindow.StyleMask = [.titled, .closable, .fullSizeContentView]
         if resizable { mask.insert(.resizable) }
         let window = NSWindow(
@@ -475,6 +492,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSear
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         window.backgroundColor = NSColor(red: 0.07, green: 0.07, blue: 0.09, alpha: 1.0)
+        if autoFit {
+            // Force layout pass so intrinsicContentSize is populated, then
+            // resize the window to match before centering.
+            hostingView.layoutSubtreeIfNeeded()
+            let fit = hostingView.fittingSize
+            window.setContentSize(NSSize(width: max(fit.width, width),
+                                         height: max(fit.height, 200)))
+        }
         window.center()
         window.isReleasedWhenClosed = false
         window.isMovableByWindowBackground = true

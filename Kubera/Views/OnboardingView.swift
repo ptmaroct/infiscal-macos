@@ -4,9 +4,20 @@ import KuberaCore
 struct OnboardingView: View {
     @ObservedObject var viewModel: AppViewModel
     @StateObject private var onboarding = OnboardingViewModel()
+    /// Optional pre-selected backend; when set the welcome + backend-choice
+    /// steps are skipped (used by "Connect to Infisical…" from Settings).
+    let forceBackend: OnboardingViewModel.Backend?
     let onDismiss: () -> Void
 
     @State private var appeared = false
+
+    init(viewModel: AppViewModel,
+         forceBackend: OnboardingViewModel.Backend? = nil,
+         onDismiss: @escaping () -> Void) {
+        self.viewModel = viewModel
+        self.forceBackend = forceBackend
+        self.onDismiss = onDismiss
+    }
 
     private var stepIndex: Int {
         switch onboarding.currentStep {
@@ -78,6 +89,13 @@ struct OnboardingView: View {
         .onAppear {
             withAnimation(.easeOut(duration: 0.5).delay(0.1)) {
                 appeared = true
+            }
+            if let forced = forceBackend {
+                onboarding.selectedBackend = forced
+                if forced == .infisical {
+                    onboarding.currentStep = .cliCheck
+                    Task { await onboarding.checkCLI() }
+                }
             }
         }
     }

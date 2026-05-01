@@ -21,7 +21,8 @@ struct AddSecretView: View {
                 .ignoresSafeArea()
             formContent
         }
-        .frame(width: 500, height: 700)
+        .frame(width: 500)
+        .fixedSize(horizontal: false, vertical: true)
         .preferredColorScheme(.dark)
         .onAppear {
             Task { await addVM.loadInitialData() }

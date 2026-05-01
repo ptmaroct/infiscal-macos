@@ -504,14 +504,15 @@ struct SecretRow: View {
 
                 // Edit
                 Button(action: onEdit) {
-                    Image(systemName: "pencil")
-                        .font(.system(size: 11, weight: .medium))
+                    Image(systemName: "square.and.pencil")
+                        .font(.system(size: 12, weight: .medium))
                         .foregroundColor(Color.vault.textSecondary)
                         .frame(width: 26, height: 26)
                         .background(isHovered ? Color.vault.surface : .clear)
                         .cornerRadius(5)
                 }
                 .buttonStyle(.plain)
+                .help("Edit secret")
 
                 // Delete
                 Button(action: onDelete) {
@@ -528,9 +529,13 @@ struct SecretRow: View {
         .padding(.horizontal, 24)
         .padding(.vertical, 12)
         .background(isHovered ? Color.vault.surfaceHover.opacity(0.5) : .clear)
+        .contentShape(Rectangle())
         .onHover { hovering in
             isHovered = hovering
         }
+        // Row click opens edit. Action buttons (Copy, Edit, Delete) consume their
+        // own taps so they still trigger their dedicated handlers.
+        .onTapGesture { onEdit() }
     }
 }
 

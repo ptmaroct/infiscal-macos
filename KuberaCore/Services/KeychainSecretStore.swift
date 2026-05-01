@@ -20,7 +20,10 @@ public actor KeychainSecretStore: SecretStore {
     /// Synthetic project ID used when the local backend is active. Stored in
     /// `AppConfiguration.projectId` so call sites that key on projectId still work.
     public static let localProjectId = "local"
-    public static let defaultEnvironments = ["dev", "stg", "prod"]
+    public static let defaultEnvironments = ["dev", "staging", "prod"]
+    public static let defaultEnvironmentNames = ["dev": "Development",
+                                                 "staging": "Staging",
+                                                 "prod": "Production"]
 
     private static let keychainService = "com.kubera.local"
     private static let masterKeyAccount = "master-key"
@@ -156,6 +159,51 @@ public actor KeychainSecretStore: SecretStore {
         store.tags.append(tag)
         try save(store)
         return tag.toInfisical()
+    }
+
+    public func createProject(name: String) async throws -> InfisicalProject {
+        var store = try loadOrInit()
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw LocalStoreError.invalidName("Project name cannot be empty")
+        }
+        let id = Self.slugify(trimmed)
+        if store.projects.contains(where: { $0.id == id }) {
+            throw LocalStoreError.duplicateKey(trimmed)
+        }
+        let envs = Self.defaultEnvironments.map {
+            LocalEnvironment(slug: $0,
+                             name: Self.defaultEnvironmentNames[$0] ?? $0.capitalized)
+        }
+        let project = LocalProject(id: id, name: trimmed, environments: envs)
+        store.projects.append(project)
+        try save(store)
+        return InfisicalProject(
+            id: project.id, name: project.name, slug: project.id,
+            environments: project.environments.map {
+                InfisicalEnvironment(name: $0.name, slug: $0.slug)
+            }
+        )
+    }
+
+    public func createEnvironment(name: String, slug: String,
+                                  projectId: String) async throws -> InfisicalEnvironment {
+        var store = try loadOrInit()
+        guard let pIdx = store.projects.firstIndex(where: { $0.id == projectId }) else {
+            throw LocalStoreError.notFound(projectId)
+        }
+        let cleanSlug = Self.slugify(slug.isEmpty ? name : slug)
+        guard !cleanSlug.isEmpty else {
+            throw LocalStoreError.invalidName("Environment slug cannot be empty")
+        }
+        if store.projects[pIdx].environments.contains(where: { $0.slug == cleanSlug }) {
+            throw LocalStoreError.duplicateKey(cleanSlug)
+        }
+        let env = LocalEnvironment(slug: cleanSlug,
+                                   name: name.trimmingCharacters(in: .whitespacesAndNewlines))
+        store.projects[pIdx].environments.append(env)
+        try save(store)
+        return InfisicalEnvironment(name: env.name, slug: env.slug)
     }
 
     // MARK: - Backup helpers
@@ -335,12 +383,14 @@ public enum LocalStoreError: LocalizedError {
     case duplicateKey(String)
     case notFound(String)
     case keychainFailed(Int)
+    case invalidName(String)
 
     public var errorDescription: String? {
         switch self {
-        case .duplicateKey(let k): return "Secret '\(k)' already exists in this environment."
-        case .notFound(let k): return "Secret '\(k)' not found."
+        case .duplicateKey(let k): return "'\(k)' already exists."
+        case .notFound(let k): return "'\(k)' not found."
         case .keychainFailed(let code): return "Keychain operation failed (\(code))."
+        case .invalidName(let msg): return msg
         }
     }
 }
@@ -353,7 +403,8 @@ struct LocalStore: Codable {
 
     static func bootstrap() -> LocalStore {
         let envs = KeychainSecretStore.defaultEnvironments.map {
-            LocalEnvironment(slug: $0, name: $0.capitalized)
+            LocalEnvironment(slug: $0,
+                             name: KeychainSecretStore.defaultEnvironmentNames[$0] ?? $0.capitalized)
         }
         let project = LocalProject(
             id: KeychainSecretStore.localProjectId,

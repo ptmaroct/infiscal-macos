@@ -76,6 +76,18 @@ struct SettingsView: View {
     @State private var backupStatusMessage: String?
     @State private var restoreOverwrite: Bool = false
 
+    // New project / env prompts
+    @State private var showNewProjectPrompt: Bool = false
+    @State private var newProjectName: String = ""
+    @State private var showNewEnvPrompt: Bool = false
+    @State private var newEnvName: String = ""
+    @State private var newEnvSlug: String = ""
+    @State private var creationError: String?
+
+    // Backend switching
+    @State private var showBackendSwitchPrompt: Bool = false
+    @State private var pendingSwitchTarget: String = ""
+
     private let horizontalPadding: CGFloat = 22
     private let columnSpacing: CGFloat = 14
     private var columnWidth: CGFloat {
@@ -112,10 +124,8 @@ struct SettingsView: View {
                 } else {
                     // Compact two-column settings panel. Cards size to content
                     // and notes wrap so sparse cards do not stretch unevenly.
-                    // Wrapped in ScrollView so the window can shrink without
-                    // truncating the lower cards (Storage card pushes total
-                    // height past the original 500px on standard layouts).
-                    ScrollView(.vertical, showsIndicators: false) {
+                    // No outer ScrollView — the window auto-sizes to content
+                    // height so nothing gets clipped or padded with empty space.
                     HStack(alignment: .top, spacing: columnSpacing) {
                         VStack(spacing: 14) {
                             // Project & Environment card
@@ -160,6 +170,13 @@ struct SettingsView: View {
                                                     }
                                                 }
                                             }
+                                            Divider()
+                                            Button {
+                                                newProjectName = ""
+                                                showNewProjectPrompt = true
+                                            } label: {
+                                                Label("New Project…", systemImage: "plus")
+                                            }
                                         } label: {
                                             dropdownPill(text: allProjectsSelected
                                                          ? "All Projects"
@@ -203,6 +220,14 @@ struct SettingsView: View {
                                                             }
                                                         }
                                                     }
+                                                }
+                                                Divider()
+                                                Button {
+                                                    newEnvName = ""
+                                                    newEnvSlug = ""
+                                                    showNewEnvPrompt = true
+                                                } label: {
+                                                    Label("New Environment…", systemImage: "plus")
                                                 }
                                             } label: {
                                                 dropdownPill(text: allEnvironmentsSelected
@@ -455,12 +480,49 @@ struct SettingsView: View {
                         .padding(.horizontal, horizontalPadding)
                         .padding(.top, 14)
                         .padding(.bottom, 16)
-                    }
                 }
             }
         }
-        .frame(minWidth: Self.windowWidth, minHeight: Self.windowHeight)
+        .frame(width: Self.windowWidth)
+        .fixedSize(horizontal: false, vertical: true)
         .preferredColorScheme(.dark)
+        .alert("New Project", isPresented: $showNewProjectPrompt) {
+            TextField("Project name", text: $newProjectName)
+            Button("Cancel", role: .cancel) { }
+            Button("Create") { Task { await createProject() } }
+                .disabled(newProjectName.trimmingCharacters(in: .whitespaces).isEmpty)
+        } message: {
+            Text((AppConfiguration.load()?.isLocalBackend ?? true)
+                 ? "Add a new local project. Default envs (Development, Staging, Production) are created."
+                 : "Projects must be created in the Infisical dashboard. This dialog only affects local backend.")
+        }
+        .alert("New Environment", isPresented: $showNewEnvPrompt) {
+            TextField("Display name (e.g. QA)", text: $newEnvName)
+            TextField("Slug (e.g. qa)", text: $newEnvSlug)
+            Button("Cancel", role: .cancel) { }
+            Button("Create") { Task { await createEnvironment() } }
+                .disabled(newEnvName.trimmingCharacters(in: .whitespaces).isEmpty)
+        } message: {
+            Text("Add a new environment to \(selectedProject?.name ?? "this project").")
+        }
+        .alert("Switch Backend", isPresented: $showBackendSwitchPrompt) {
+            Button("Cancel", role: .cancel) { }
+            Button(pendingSwitchTarget == SecretStoreBackendID.local ? "Switch to Local" : "Connect Infisical") {
+                applyBackendSwitch()
+            }
+        } message: {
+            Text(pendingSwitchTarget == SecretStoreBackendID.local
+                 ? "Switch to local-only mode. Existing local secrets remain. Infisical secrets are not deleted on the server but stop showing here."
+                 : "Connect this Mac to an Infisical workspace. The current local secrets stay encrypted on disk.")
+        }
+        .alert("Error", isPresented: Binding(
+            get: { creationError != nil },
+            set: { if !$0 { creationError = nil } }
+        )) {
+            Button("OK", role: .cancel) { creationError = nil }
+        } message: {
+            Text(creationError ?? "")
+        }
         .onAppear {
             loadData()
             loadShortcut()
@@ -548,15 +610,36 @@ struct SettingsView: View {
     /// this card just surfaces what's running and the export tools.
     @ViewBuilder
     private func storageCard() -> some View {
-        let backendLabel = (AppConfiguration.load()?.isLocalBackend ?? false)
-            ? "On this Mac"
-            : "Infisical"
+        let isLocal = AppConfiguration.load()?.isLocalBackend ?? false
+        let backendLabel = isLocal ? "On this Mac" : "Infisical"
         glassCard {
             VStack(spacing: 12) {
                 settingsRow(icon: "lock.shield", label: "Storage") {
                     Text(backendLabel)
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(.white.opacity(0.85))
+                }
+
+                Divider().opacity(0.2)
+
+                HStack(spacing: 8) {
+                    Spacer()
+                    Button {
+                        pendingSwitchTarget = isLocal
+                            ? SecretStoreBackendID.infisical
+                            : SecretStoreBackendID.local
+                        showBackendSwitchPrompt = true
+                    } label: {
+                        Label(isLocal ? "Connect to Infisical…" : "Switch to Local Mode",
+                              systemImage: isLocal ? "icloud.and.arrow.up" : "internaldrive")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(.white.opacity(0.08))
+                    .cornerRadius(5)
+                    .foregroundColor(.white.opacity(0.9))
                 }
 
                 Divider().opacity(0.2)
@@ -614,6 +697,63 @@ struct SettingsView: View {
         }
     }
 
+    private func createProject() async {
+        guard let cfg = AppConfiguration.load() else { return }
+        let store = SecretStoreFactory.make(for: cfg)
+        do {
+            let project = try await store.createProject(name: newProjectName)
+            await reloadProjectsAndSelect(projectId: project.id)
+        } catch {
+            creationError = error.localizedDescription
+        }
+    }
+
+    private func createEnvironment() async {
+        guard let cfg = AppConfiguration.load(), let project = selectedProject else { return }
+        let store = SecretStoreFactory.make(for: cfg)
+        do {
+            let env = try await store.createEnvironment(
+                name: newEnvName,
+                slug: newEnvSlug.isEmpty ? newEnvName : newEnvSlug,
+                projectId: project.id
+            )
+            await reloadProjectsAndSelect(projectId: project.id, envSlug: env.slug)
+        } catch {
+            creationError = error.localizedDescription
+        }
+    }
+
+    private func reloadProjectsAndSelect(projectId: String, envSlug: String? = nil) async {
+        ProjectCache.shared.invalidateProjects()
+        let fresh = await ProjectCache.shared.fetchProjects()
+        projects = fresh
+        if let project = fresh.first(where: { $0.id == projectId }) {
+            allProjectsSelected = false
+            selectedProject = project
+            allEnvironmentsSelected = false
+            if let envSlug, let env = project.environments.first(where: { $0.slug == envSlug }) {
+                selectedEnvironment = env
+            } else if selectedEnvironment == nil {
+                selectedEnvironment = project.environments.first
+            }
+        }
+        scheduleSave()
+    }
+
+    private func applyBackendSwitch() {
+        if pendingSwitchTarget == SecretStoreBackendID.local {
+            // Switch to Local: stamp config + reload.
+            AppConfiguration.defaultLocal().save()
+            ProjectCache.shared.invalidateProjects()
+            viewModel.configurationSaved()
+            Task { await reloadProjectsAndSelect(projectId: KeychainSecretStore.localProjectId) }
+        } else {
+            // Connect Infisical: hand off to Onboarding.
+            NotificationCenter.default.post(name: .kuberaConnectInfisicalRequested, object: nil)
+            onDismiss()
+        }
+    }
+
     private func runBackup() async {
         isBackupRunning = true
         backupStatusMessage = nil
@@ -661,7 +801,7 @@ struct SettingsView: View {
                 inlineLink("Infisical", url: "https://infisical.com")
             }
             HStack(spacing: 4) {
-                Text("v1.5.1")
+                Text("v" + (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"))
                     .foregroundColor(.white.opacity(0.3))
                 Text("·")
                     .foregroundColor(.white.opacity(0.2))
@@ -916,7 +1056,9 @@ struct SettingsView: View {
             organizationId: existingConfig?.organizationId,
             shortcutKeyCode: shortcutKeyCode,
             shortcutModifiers: shortcutModifiers,
-            defaultAddEnvironment: defaultAddEnvSlug
+            defaultAddEnvironment: defaultAddEnvSlug,
+            storeBackend: existingConfig?.storeBackend ?? SecretStoreBackendID.infisical,
+            iCloudSyncEnabled: existingConfig?.iCloudSyncEnabled ?? false
         )
         config.save()
 

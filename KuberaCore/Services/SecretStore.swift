@@ -59,6 +59,23 @@ public protocol SecretStore: Sendable {
     func listProjects() async throws -> [InfisicalProject]
     func listTags(projectId: String) async throws -> [InfisicalTag]
     func createTag(name: String, color: String, projectId: String) async throws -> InfisicalTag
+
+    /// Create a new project. For Infisical this throws — projects are created in
+    /// the dashboard. Local backend creates a project locally.
+    func createProject(name: String) async throws -> InfisicalProject
+
+    /// Create a new environment in an existing project. Both backends support this.
+    func createEnvironment(name: String, slug: String, projectId: String) async throws -> InfisicalEnvironment
+}
+
+public enum SecretStoreFeatureError: LocalizedError {
+    case unsupportedByBackend(String)
+
+    public var errorDescription: String? {
+        switch self {
+        case .unsupportedByBackend(let msg): return msg
+        }
+    }
 }
 
 public enum SecretStoreBackendID {
@@ -179,5 +196,18 @@ public struct InfisicalSecretStore: SecretStore {
 
     public func createTag(name: String, color: String, projectId: String) async throws -> InfisicalTag {
         try await InfisicalCLIService.createTag(name: name, projectId: projectId, color: color, baseURL: baseURL)
+    }
+
+    public func createProject(name: String) async throws -> InfisicalProject {
+        throw SecretStoreFeatureError.unsupportedByBackend(
+            "Create projects in the Infisical dashboard, then refresh."
+        )
+    }
+
+    public func createEnvironment(name: String, slug: String,
+                                  projectId: String) async throws -> InfisicalEnvironment {
+        try await InfisicalCLIService.createEnvironment(
+            name: name, slug: slug, projectId: projectId, baseURL: baseURL
+        )
     }
 }

@@ -151,6 +151,36 @@ public struct InfisicalCLIService {
         return decoded.workspaceTags
     }
 
+    public static func createEnvironment(
+        name: String,
+        slug: String,
+        projectId: String,
+        baseURL: String = "https://app.infisical.com"
+    ) async throws -> InfisicalEnvironment {
+        guard let token = getToken() else { throw CLIError.notLoggedIn }
+        let url = URL(string: "\(baseURL)/api/v1/workspace/\(projectId)/environments")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 10
+
+        let body: [String: Any] = ["name": name, "slug": slug]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode >= 400 {
+            if let errorJson = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let message = errorJson["message"] as? String {
+                throw CLIError.executionFailed(message)
+            }
+            throw CLIError.executionFailed("Failed to create environment")
+        }
+        // Infisical returns the new env inside the updated workspace; rather than
+        // round-tripping the schema we return the requested values directly.
+        return InfisicalEnvironment(name: name, slug: slug)
+    }
+
     public static func createTag(name: String, projectId: String, color: String = "#F5A524", baseURL: String = "https://app.infisical.com") async throws -> InfisicalTag {
         guard let token = getToken() else { throw CLIError.notLoggedIn }
         let url = URL(string: "\(baseURL)/api/v1/workspace/\(projectId)/tags")!
