@@ -100,19 +100,40 @@ final class AddSecretViewModel: ObservableObject {
     }
 
     private func preSelectFromConfig() {
-        guard let config = AppConfiguration.load() else { return }
-        selectedProject = projects.first(where: { $0.id == config.projectId })
+        guard !projects.isEmpty else { return }
+
+        guard let config = AppConfiguration.load() else {
+            selectedProject = projects.first
+            if let project = selectedProject {
+                applyProjectDefaults(project: project, preferredEnvironmentSlug: nil)
+            }
+            return
+        }
+
+        if config.isAllProjects {
+            selectedProject = projects.first
+        } else {
+            selectedProject = projects.first(where: { $0.id == config.projectId }) ?? projects.first
+        }
+
         if let project = selectedProject {
-            environments = project.environments
             // Prefer the saved default-add env, then the configured menu env,
             // and fall back to the project's first env so the form is never
             // stuck without a selection (esp. in All-Environments mode).
-            let preferred = config.defaultAddEnvironment ?? config.environment
-            if let env = environments.first(where: { $0.slug == preferred }) {
-                selectedEnvironmentIds = [env.id]
-            } else if let first = environments.first {
-                selectedEnvironmentIds = [first.id]
-            }
+            let preferred = config.defaultAddEnvironment ?? (config.isAllEnvironments ? nil : config.environment)
+            applyProjectDefaults(project: project, preferredEnvironmentSlug: preferred)
+        }
+    }
+
+    private func applyProjectDefaults(project: InfisicalProject, preferredEnvironmentSlug: String?) {
+        environments = project.environments
+        selectedEnvironmentIds = []
+
+        if let preferredEnvironmentSlug,
+           let env = environments.first(where: { $0.slug == preferredEnvironmentSlug }) {
+            selectedEnvironmentIds = [env.id]
+        } else if let first = environments.first {
+            selectedEnvironmentIds = [first.id]
         }
     }
 
@@ -128,13 +149,8 @@ final class AddSecretViewModel: ObservableObject {
             return
         }
 
-        environments = project.environments
         let defaultSlug = AppConfiguration.load()?.defaultAddEnvironment
-        if let preferred = defaultSlug, let env = environments.first(where: { $0.slug == preferred }) {
-            selectedEnvironmentIds = [env.id]
-        } else if let first = environments.first {
-            selectedEnvironmentIds = [first.id]
-        }
+        applyProjectDefaults(project: project, preferredEnvironmentSlug: defaultSlug)
         selectedTagIds = []
         pendingTagNames = []
 

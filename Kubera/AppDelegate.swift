@@ -99,13 +99,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSSear
 
         menu.addItem(NSMenuItem.separator())
 
-        // View All Secrets
-        let viewAllItem = NSMenuItem(title: "View All Secrets...", action: #selector(openSecretList), keyEquivalent: "l")
+        // View All
+        let viewAllItem = NSMenuItem(title: "View All", action: #selector(openSecretList), keyEquivalent: "a")
         viewAllItem.target = self
         menu.addItem(viewAllItem)
 
-        // Add New Secret
-        let addItem = NSMenuItem(title: "Add New Secret...", action: #selector(openAddSecret), keyEquivalent: "n")
+        // New Secret
+        let addItem = NSMenuItem(title: "New Secret", action: #selector(openAddSecret), keyEquivalent: "n")
         addItem.target = self
         menu.addItem(addItem)
 
