@@ -12,6 +12,14 @@ struct SettingsView: View {
     @State private var allEnvironmentsSelected: Bool = false
     @State private var allProjectsSelected: Bool = false
     @State private var defaultAddEnvSlug: String?
+
+    /// Save button enabled when either: all-projects mode is on (env is locked
+    /// to all-envs), or a single project + an env / all-envs is selected.
+    private var isSaveable: Bool {
+        if allProjectsSelected { return true }
+        guard selectedProject != nil else { return false }
+        return allEnvironmentsSelected || selectedEnvironment != nil
+    }
     @State private var secretPath: String = "/"
     @State private var isLoading = true
     @State private var statusMessage: String?
@@ -114,18 +122,14 @@ struct SettingsView: View {
                                         .fixedSize()
                                     }
 
-                                    Divider().opacity(0.2)
+                                    if !allProjectsSelected {
+                                        Divider().opacity(0.2)
 
-                                    settingsRow(
-                                        icon: "leaf.fill",
-                                        label: "Environment"
-                                    ) {
-                                        if allProjectsSelected {
-                                            // All-projects mode forces all-envs.
-                                            // Render a non-interactive pill so the row doesn't go blank.
-                                            dropdownPill(text: "All Environments")
-                                                .opacity(0.6)
-                                        } else if let envs = selectedProject?.environments, !envs.isEmpty {
+                                        settingsRow(
+                                            icon: "leaf.fill",
+                                            label: "Environment"
+                                        ) {
+                                            if let envs = selectedProject?.environments, !envs.isEmpty {
                                             Menu {
                                                 Button {
                                                     allEnvironmentsSelected = true
@@ -160,6 +164,7 @@ struct SettingsView: View {
                                             .buttonStyle(.plain)
                                             .menuIndicator(.hidden)
                                             .fixedSize()
+                                        }
                                         }
                                     }
 
@@ -508,8 +513,8 @@ struct SettingsView: View {
                         .cornerRadius(10)
                 }
                 .buttonStyle(.plain)
-                .disabled(selectedProject == nil || (!allEnvironmentsSelected && selectedEnvironment == nil))
-                .opacity(selectedProject == nil || (!allEnvironmentsSelected && selectedEnvironment == nil) ? 0.4 : 1)
+                .disabled(!isSaveable)
+                .opacity(isSaveable ? 1 : 0.4)
                 .padding(.horizontal, 24)
                 .padding(.bottom, 20)
             }
