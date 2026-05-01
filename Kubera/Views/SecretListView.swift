@@ -733,54 +733,7 @@ struct EditSecretSheet: View {
                 .foregroundColor(Color.vault.textSecondary)
                 .tracking(1.2)
 
-            HStack(spacing: 8) {
-                Image(systemName: "calendar")
-                    .font(.system(size: 11))
-                    .foregroundColor(Color.vault.textTertiary)
-
-                if let date = listVM.editExpiryDate {
-                    DatePicker(
-                        "",
-                        selection: Binding(
-                            get: { date },
-                            set: { listVM.editExpiryDate = $0 }
-                        ),
-                        displayedComponents: .date
-                    )
-                    .labelsHidden()
-                    .datePickerStyle(.compact)
-
-                    Spacer()
-
-                    Button {
-                        listVM.editExpiryDate = nil
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 12))
-                            .foregroundColor(Color.vault.textTertiary)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Clear expiry")
-                } else {
-                    Button {
-                        listVM.editExpiryDate = Calendar.current.date(byAdding: .day, value: 90, to: Date())
-                    } label: {
-                        Text("Set expiry date")
-                            .font(.system(size: 12))
-                            .foregroundColor(Color.vault.accent)
-                    }
-                    .buttonStyle(.plain)
-                    Spacer()
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(Color.vault.bg)
-            .cornerRadius(8)
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color.vault.border, lineWidth: 1)
-            )
+            ExpiryDateField(date: $listVM.editExpiryDate)
         }
     }
 

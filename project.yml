@@ -16,8 +16,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.anujsharma.Kubera
         PRODUCT_NAME: Kubera
-        MARKETING_VERSION: "1.6.0"
-        CURRENT_PROJECT_VERSION: "10"
+        MARKETING_VERSION: "1.6.1"
+        CURRENT_PROJECT_VERSION: "11"
         SWIFT_VERSION: "5.9"
         MACOSX_DEPLOYMENT_TARGET: "13.0"
         INFOPLIST_FILE: Kubera/Info.plist

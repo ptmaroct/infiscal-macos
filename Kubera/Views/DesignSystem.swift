@@ -513,3 +513,86 @@ struct VaultTextEditor: View {
         }
     }
 }
+
+/// Expiry date field with stable layout. Replaces the inline `.compact`
+/// `DatePicker` (which renders an editable spinner that shifts the row when a
+/// value is set vs. cleared). Click → popover with a graphical calendar.
+struct ExpiryDateField: View {
+    @Binding var date: Date?
+    var minDate: Date? = nil
+    var placeholder: String = "Set expiry date"
+
+    @State private var showPopover = false
+
+    private static let formatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        f.timeStyle = .none
+        return f
+    }()
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "calendar")
+                .font(.system(size: 11))
+                .foregroundColor(Color.vault.textTertiary)
+
+            Button {
+                if date == nil {
+                    date = Calendar.current.date(byAdding: .day, value: 90, to: Date())
+                }
+                showPopover = true
+            } label: {
+                Text(date.map { Self.formatter.string(from: $0) } ?? placeholder)
+                    .font(.system(size: 12))
+                    .foregroundColor(date == nil ? Color.vault.accent : Color.vault.text)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .popover(isPresented: $showPopover, arrowEdge: .bottom) {
+                VStack(spacing: 12) {
+                    DatePicker(
+                        "",
+                        selection: Binding(
+                            get: { date ?? Date() },
+                            set: { date = $0 }
+                        ),
+                        in: (minDate ?? Date.distantPast)...,
+                        displayedComponents: .date
+                    )
+                    .labelsHidden()
+                    .datePickerStyle(.graphical)
+                    .frame(minWidth: 280)
+
+                    HStack {
+                        Spacer()
+                        Button("Done") { showPopover = false }
+                            .keyboardShortcut(.defaultAction)
+                    }
+                }
+                .padding(14)
+            }
+
+            if date != nil {
+                Button {
+                    date = nil
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 12))
+                        .foregroundColor(Color.vault.textTertiary)
+                }
+                .buttonStyle(.plain)
+                .help("Clear expiry")
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color.vault.bg)
+        .cornerRadius(8)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.vault.border, lineWidth: 1)
+        )
+    }
+}

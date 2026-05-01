@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.6.1 — Date picker + form polish
+
+### Changed
+- **Expiry date picker**: replaced inline `.compact` `DatePicker` (editable spinner that shifted layout when set vs. cleared) with a popover that opens a `.graphical` calendar. New `ExpiryDateField` reused by Add Secret and Edit Secret. No more layout jitter.
+- **New Secret context section** reorganized: Project + Environment now stacked into two clean rows with consistent icon/label/control layout. Removed the truncated `Env... <name>` summary text that duplicated what the chips already convey.
+
 ## v1.6.0 — Local backend + Infisical optional
 
 Kubera now runs end-to-end against either backend. Infisical is no longer required to use the app.

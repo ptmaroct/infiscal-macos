@@ -97,28 +97,36 @@ struct AddSecretView: View {
 
     private var contextRow: some View {
         formCard {
-            VStack(spacing: 12) {
-                HStack(alignment: .center, spacing: 12) {
-                    selectionRow(icon: "folder.fill", label: "Project") {
-                        projectPicker
-                    }
-
-                    if !addVM.environments.isEmpty {
-                        Rectangle()
-                            .fill(Color.white.opacity(0.08))
-                            .frame(width: 1, height: 28)
-
-                        selectionRow(icon: "leaf.fill", label: "Environment") {
-                            Text(environmentSummary)
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(Color.vault.textSecondary)
-                                .lineLimit(1)
-                        }
-                    }
+            VStack(alignment: .leading, spacing: 14) {
+                // Project row
+                HStack(spacing: 10) {
+                    Image(systemName: "folder.fill")
+                        .font(.system(size: 12))
+                        .foregroundColor(Color.vault.accent)
+                        .frame(width: 18)
+                    Text("Project")
+                        .font(.system(size: 13))
+                        .foregroundColor(Color.vault.textSecondary)
+                    Spacer(minLength: 12)
+                    projectPicker
                 }
 
                 if !addVM.environments.isEmpty {
-                    environmentChips
+                    Divider().opacity(0.2)
+
+                    // Environment row — chips on the right wrap as needed.
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: "leaf.fill")
+                            .font(.system(size: 12))
+                            .foregroundColor(Color.vault.accent)
+                            .frame(width: 18)
+                        Text("Environment")
+                            .font(.system(size: 13))
+                            .foregroundColor(Color.vault.textSecondary)
+                        Spacer(minLength: 12)
+                        environmentChips
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                    }
                 }
             }
         }
@@ -279,57 +287,7 @@ struct AddSecretView: View {
                 .foregroundColor(Color.vault.textSecondary)
                 .tracking(1.2)
 
-            HStack(spacing: 8) {
-                Image(systemName: "calendar")
-                    .font(.system(size: 11))
-                    .foregroundColor(Color.vault.textTertiary)
-
-                if let date = addVM.expiryDate {
-                    DatePicker(
-                        "",
-                        selection: Binding(
-                            get: { date },
-                            set: { addVM.expiryDate = $0 }
-                        ),
-                        in: Date()...,
-                        displayedComponents: .date
-                    )
-                    .labelsHidden()
-                    .datePickerStyle(.compact)
-
-                    Spacer()
-
-                    Button {
-                        addVM.expiryDate = nil
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 12))
-                            .foregroundColor(Color.vault.textTertiary)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Clear expiry")
-                } else {
-                    Button {
-                        let cal = Calendar.current
-                        addVM.expiryDate = cal.date(byAdding: .day, value: 90, to: Date())
-                    } label: {
-                        Text("Set expiry date")
-                            .font(.system(size: 12))
-                            .foregroundColor(Color.vault.accent)
-                    }
-                    .buttonStyle(.plain)
-
-                    Spacer()
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(Color.vault.bg)
-            .cornerRadius(8)
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color.vault.border, lineWidth: 1)
-            )
+            ExpiryDateField(date: $addVM.expiryDate, minDate: Date())
         }
     }
 
