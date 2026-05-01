@@ -206,7 +206,7 @@ kubera import ~/Desktop/kubera-backup.kubera                            # prompt
 
 Pair `--dry-run` with import to preview, and `--overwrite` to update existing secrets that share `(project, env, path, key)`. The archive format is documented in `KuberaCore/Services/LocalCrypto.swift` (`BackupArchive`).
 
-> A local-only backend (`storeBackend: "local"`) that keeps secrets in an encrypted file at `~/Library/Application Support/Kubera/local-store.kbra` with the master key in macOS Keychain is wired in Phase 1 of [#9](https://github.com/ptmaroct/kubera/issues/9). Wiring the GUI to switch backends end-to-end ships in Phase 2.
+> Phase 2 (v1.5.1-beta.2) wires the GUI through the `SecretStore` protocol so picking **On this Mac** in onboarding gives you a fully local, encrypted vault — no Infisical account required. Settings → Storage exposes Backup… / Restore… buttons that drive the same encrypted archive flow.
 
 ## Why is the macOS sandbox disabled?
 

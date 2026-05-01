@@ -86,6 +86,7 @@ public actor KeychainSecretStore: SecretStore {
 
     public func updateSecret(
         name: String, value: String, comment: String, tagIds: [String],
+        tagsExplicit: Bool,
         expiryDate: Date?, serviceURL: String?, metadataExplicit: Bool,
         environment: String, projectId: String, secretPath: String
     ) async throws {
@@ -99,7 +100,7 @@ public actor KeychainSecretStore: SecretStore {
         var rec = store.secrets[idx]
         rec.value = value
         rec.comment = comment.isEmpty ? nil : comment
-        rec.tagIds = tagIds
+        if tagsExplicit { rec.tagIds = tagIds }
         if metadataExplicit {
             rec.secretMetadata = LocalSecretRecord.buildMetadata(
                 expiryDate: expiryDate, serviceURL: serviceURL

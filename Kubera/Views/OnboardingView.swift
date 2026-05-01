@@ -11,10 +11,17 @@ struct OnboardingView: View {
     private var stepIndex: Int {
         switch onboarding.currentStep {
         case .welcome: return 0
-        case .cliCheck: return 1
-        case .configure: return 2
-        case .done: return 3
+        case .backendChoice: return 1
+        case .cliCheck: return 2
+        case .configure: return 3
+        case .done: return 4
         }
+    }
+
+    /// Total visible steps depends on backend — local skips the CLI/configure
+    /// pair, so the indicator caps at 3; Infisical needs all 5.
+    private var stepTotal: Int {
+        onboarding.selectedBackend == .local ? 3 : 5
     }
 
     var body: some View {
@@ -23,7 +30,7 @@ struct OnboardingView: View {
 
             VStack(spacing: 0) {
                 // Step indicator
-                StepIndicator(totalSteps: 4, currentStep: stepIndex)
+                StepIndicator(totalSteps: stepTotal, currentStep: min(stepIndex, stepTotal - 1))
                     .padding(.top, 24)
                     .opacity(appeared ? 1 : 0)
                     .offset(y: appeared ? 0 : -8)
@@ -35,6 +42,12 @@ struct OnboardingView: View {
                         welcomeStep
                             .transition(.asymmetric(
                                 insertion: .opacity.combined(with: .scale(scale: 0.96)),
+                                removal: .opacity.combined(with: .offset(x: -30))
+                            ))
+                    case .backendChoice:
+                        backendChoiceStep
+                            .transition(.asymmetric(
+                                insertion: .opacity.combined(with: .offset(x: 30)),
                                 removal: .opacity.combined(with: .offset(x: -30))
                             ))
                     case .cliCheck:
@@ -96,22 +109,129 @@ struct OnboardingView: View {
 
             VaultButton(title: "Get Started", style: .primary) {
                 withAnimation {
-                    onboarding.currentStep = .cliCheck
+                    onboarding.currentStep = .backendChoice
                 }
-                Task { await onboarding.checkCLI() }
             }
             .padding(.bottom, 16)
 
             HStack(spacing: 4) {
                 Image(systemName: "lock.shield.fill")
                     .font(.system(size: 9))
-                Text("Secrets never touch disk")
+                Text("Local-first by default")
                     .font(.system(size: 10))
             }
             .foregroundColor(Color.vault.textTertiary)
             .padding(.bottom, 28)
         }
         .padding(.horizontal, 40)
+    }
+
+    // MARK: - Backend Choice
+
+    @State private var localBootstrapError: String?
+
+    private var backendChoiceStep: some View {
+        VStack(spacing: 0) {
+            Spacer()
+
+            Text("Where should Kubera keep your secrets?")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundColor(Color.vault.text)
+                .padding(.bottom, 6)
+
+            Text("You can switch later from Settings.")
+                .font(.system(size: 12))
+                .foregroundColor(Color.vault.textSecondary)
+                .padding(.bottom, 24)
+
+            HStack(spacing: 12) {
+                backendCard(
+                    icon: "lock.iphone",
+                    title: "On this Mac",
+                    body: "Encrypted with a Keychain-resident key. No account, no network.",
+                    selected: onboarding.selectedBackend == .local
+                ) {
+                    onboarding.selectedBackend = .local
+                }
+                backendCard(
+                    icon: "cloud.fill",
+                    title: "Infisical",
+                    body: "Sync across devices via your team's Infisical workspace. Requires the CLI.",
+                    selected: onboarding.selectedBackend == .infisical
+                ) {
+                    onboarding.selectedBackend = .infisical
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 16)
+
+            if let err = localBootstrapError {
+                Text(err)
+                    .font(.system(size: 11))
+                    .foregroundColor(Color.vault.warning)
+                    .padding(.bottom, 8)
+            }
+
+            VaultButton(title: "Continue", style: .primary) {
+                Task { await commitBackendChoice() }
+            }
+            .disabled(onboarding.isSaving)
+            .padding(.bottom, 28)
+        }
+        .padding(.horizontal, 30)
+    }
+
+    private func backendCard(
+        icon: String,
+        title: String,
+        body: String,
+        selected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(selected ? Color.vault.accent : Color.vault.textSecondary)
+                Text(title)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(Color.vault.text)
+                Text(body)
+                    .font(.system(size: 11))
+                    .foregroundColor(Color.vault.textSecondary)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, minHeight: 130, alignment: .topLeading)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(selected ? Color.vault.accent.opacity(0.08) : .white.opacity(0.04))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(selected ? Color.vault.accent : .white.opacity(0.08),
+                            lineWidth: selected ? 1.5 : 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func commitBackendChoice() async {
+        localBootstrapError = nil
+        switch onboarding.selectedBackend {
+        case .local:
+            let ok = await onboarding.saveLocalBackend()
+            if ok {
+                viewModel.configurationSaved()
+                withAnimation { onboarding.currentStep = .done }
+            } else {
+                localBootstrapError = onboarding.errorMessage ?? "Could not initialise local store."
+            }
+        case .infisical:
+            withAnimation { onboarding.currentStep = .cliCheck }
+            await onboarding.checkCLI()
+        }
     }
 
     // MARK: - CLI Check

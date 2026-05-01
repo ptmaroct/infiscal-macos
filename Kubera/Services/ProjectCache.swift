@@ -42,14 +42,10 @@ final class ProjectCache {
             return projects
         }
 
+        let config = AppConfiguration.load() ?? AppConfiguration.defaultLocal()
+        let store = SecretStoreFactory.make(for: config)
         let task = Task.detached { () -> [InfisicalProject]? in
-            do {
-                let orgs = try await InfisicalCLIService.fetchOrganizations()
-                guard let org = orgs.first else { return nil }
-                return try await InfisicalCLIService.fetchProjects(orgId: org.id)
-            } catch {
-                return nil
-            }
+            (try? await store.listProjects())
         }
         projectsFetchTask = task
 
@@ -84,8 +80,9 @@ final class ProjectCache {
         defer { isFetchingTags.remove(projectId) }
 
         do {
-            let baseURL = AppConfiguration.load()?.baseURL ?? AppConfiguration.defaultBaseURL
-            let fetched = try await InfisicalCLIService.fetchTags(projectId: projectId, baseURL: baseURL)
+            let config = AppConfiguration.load() ?? AppConfiguration.defaultLocal()
+            let store = SecretStoreFactory.make(for: config)
+            let fetched = try await store.listTags(projectId: projectId)
             tagsCache[projectId] = fetched
             tagsLastFetchedAt[projectId] = Date()
         } catch {

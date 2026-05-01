@@ -70,6 +70,12 @@ struct SettingsView: View {
     // Dock visibility state
     @State private var showInDockWhenWindowsOpen: Bool = DockVisibilityPreference.enabled
 
+    // Backup/restore state
+    @State private var isBackupRunning: Bool = false
+    @State private var isRestoreRunning: Bool = false
+    @State private var backupStatusMessage: String?
+    @State private var restoreOverwrite: Bool = false
+
     private let horizontalPadding: CGFloat = 22
     private let columnSpacing: CGFloat = 14
     private var columnWidth: CGFloat {
@@ -433,6 +439,9 @@ struct SettingsView: View {
                                     settingNote("Show Kubera in the Dock while Settings or Onboarding is open. Off keeps it menubar-only.")
                                 }
                             }
+
+                            // Storage backend + backup/restore card
+                            storageCard()
                         }
                         .frame(width: columnWidth, alignment: .top)
                     }
@@ -528,6 +537,107 @@ struct SettingsView: View {
         .foregroundColor(.white.opacity(0.35))
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.leading, 28)
+    }
+
+    /// Storage backend card. Shows which backend is active and exposes encrypted
+    /// backup / restore. Backend switching itself happens through Onboarding —
+    /// this card just surfaces what's running and the export tools.
+    @ViewBuilder
+    private func storageCard() -> some View {
+        let backendLabel = (AppConfiguration.load()?.isLocalBackend ?? false)
+            ? "On this Mac"
+            : "Infisical"
+        glassCard {
+            VStack(spacing: 12) {
+                settingsRow(icon: "lock.shield", label: "Storage") {
+                    Text(backendLabel)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.white.opacity(0.85))
+                }
+
+                Divider().opacity(0.2)
+
+                HStack(spacing: 10) {
+                    Toggle("Overwrite on restore", isOn: $restoreOverwrite)
+                        .toggleStyle(.checkbox)
+                        .controlSize(.small)
+                        .font(.system(size: 11))
+                        .foregroundColor(.white.opacity(0.7))
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, 28)
+
+                HStack(spacing: 8) {
+                    Spacer()
+                    Button {
+                        Task { await runBackup() }
+                    } label: {
+                        Label("Backup…", systemImage: "arrow.down.circle")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isBackupRunning || isRestoreRunning)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(.white.opacity(0.08))
+                    .cornerRadius(5)
+
+                    Button {
+                        Task { await runRestore() }
+                    } label: {
+                        Label("Restore…", systemImage: "arrow.up.circle")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isBackupRunning || isRestoreRunning)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(.white.opacity(0.08))
+                    .cornerRadius(5)
+                }
+                .foregroundColor(.white.opacity(0.9))
+
+                if let msg = backupStatusMessage {
+                    Text(msg)
+                        .font(.system(size: 10))
+                        .foregroundColor(.white.opacity(0.55))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.leading, 28)
+                }
+
+                settingNote("Encrypted .kubera archive — AES-256-GCM, PBKDF2-SHA256 (524,288 rounds).")
+            }
+        }
+    }
+
+    private func runBackup() async {
+        isBackupRunning = true
+        backupStatusMessage = nil
+        let result = await BackupCoordinator.runBackup(viewModel: viewModel)
+        isBackupRunning = false
+        switch result {
+        case .cancelled: backupStatusMessage = nil
+        case .success(let count, let url):
+            backupStatusMessage = "Backed up \(count) secrets → \(url.lastPathComponent)"
+        case .failed(let msg):
+            backupStatusMessage = "Backup failed: \(msg)"
+        }
+    }
+
+    private func runRestore() async {
+        isRestoreRunning = true
+        backupStatusMessage = nil
+        let result = await BackupCoordinator.runRestore(
+            viewModel: viewModel, overwrite: restoreOverwrite
+        )
+        isRestoreRunning = false
+        switch result {
+        case .cancelled: backupStatusMessage = nil
+        case .success(let count, let url):
+            backupStatusMessage = "Restored \(count) secrets from \(url.lastPathComponent)"
+        case .failed(let msg):
+            backupStatusMessage = "Restore failed: \(msg)"
+        }
     }
 
     /// Footer block that fills the right column. Two short lines: a personal

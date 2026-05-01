@@ -5,6 +5,7 @@ import KuberaCore
 final class OnboardingViewModel: ObservableObject {
     enum Step {
         case welcome
+        case backendChoice    // pick local vs Infisical
         case cliCheck
         case configure
         case done
@@ -17,8 +18,11 @@ final class OnboardingViewModel: ObservableObject {
         case notLoggedIn
     }
 
+    enum Backend { case local, infisical }
+
     @Published var currentStep: Step = .welcome
     @Published var cliStatus: CLIStatus = .checking
+    @Published var selectedBackend: Backend = .local
 
     // Data fetched from API
     @Published var organizations: [InfisicalOrg] = []
@@ -125,10 +129,33 @@ final class OnboardingViewModel: ObservableObject {
             secretPath: secretPath,
             baseURL: AppConfiguration.defaultBaseURL,
             projectName: project.name,
-            organizationId: selectedOrg?.id
+            organizationId: selectedOrg?.id,
+            storeBackend: SecretStoreBackendID.infisical
         )
         config.save()
         isSaving = false
+        return true
+    }
+
+    /// One-tap commit for the local backend: bootstraps `KeychainSecretStore`
+    /// (creates the encrypted file + master key on first use), then writes a
+    /// matching `AppConfiguration`. Skips the project/env picker because the
+    /// local store ships a fixed `Local` project with `dev`/`stg`/`prod` envs.
+    func saveLocalBackend() async -> Bool {
+        isSaving = true
+        errorMessage = nil
+        defer { isSaving = false }
+
+        let store = KeychainSecretStore()
+        do {
+            // Force initialisation — listProjects() loads (or creates) the file
+            // and validates that the Keychain master key works.
+            _ = try await store.listProjects()
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+        AppConfiguration.defaultLocal().save()
         return true
     }
 }

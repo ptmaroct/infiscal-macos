@@ -168,25 +168,26 @@ struct Set: AsyncParsableCommand {
             resolvedValue = value
         }
 
-        // Detect existing key → update vs create.
-        let existing = try await InfisicalCLIService.listSecretsViaAPI(
+        let store = Helpers.activeStore(cfg)
+        let existing = try await store.listSecrets(
             environment: environment,
             projectId: cfg.projectId,
-            secretPath: secretPath,
-            baseURL: cfg.baseURL
+            secretPath: secretPath
         )
         if existing.contains(where: { $0.key == key }) {
-            try await InfisicalCLIService.updateSecret(
+            try await store.updateSecret(
                 name: key, value: resolvedValue, comment: comment, tagIds: tag,
+                expiryDate: nil, serviceURL: nil, metadataExplicit: false,
                 environment: environment, projectId: cfg.projectId,
-                secretPath: secretPath, baseURL: cfg.baseURL
+                secretPath: secretPath
             )
             Helpers.warn("updated \(key)")
         } else {
-            try await InfisicalCLIService.createSecretViaAPI(
+            try await store.createSecret(
                 name: key, value: resolvedValue, comment: comment, tagIds: tag,
+                expiryDate: nil, serviceURL: nil,
                 environment: environment, projectId: cfg.projectId,
-                secretPath: secretPath, baseURL: cfg.baseURL
+                secretPath: secretPath
             )
             Helpers.warn("created \(key)")
         }
@@ -222,12 +223,12 @@ struct Remove: AsyncParsableCommand {
             }
         }
 
-        try await InfisicalCLIService.deleteSecret(
+        let store = Helpers.activeStore(cfg)
+        try await store.deleteSecret(
             name: key,
             environment: environment,
             projectId: cfg.projectId,
-            secretPath: cfg.secretPath,
-            baseURL: cfg.baseURL
+            secretPath: cfg.secretPath
         )
         Helpers.warn("deleted \(key)")
     }
