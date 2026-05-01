@@ -111,23 +111,43 @@ Clipboard auto-clears after 30 seconds for security.
 
 Kubera also ships a `kubera` command-line tool that reads the same project/env config you set in the menubar app (`~/.config/kubera/config.json`). Both `install.sh` and the Homebrew cask drop a symlink onto your `$PATH`, so after install:
 
+| Command | Action |
+|---------|--------|
+| `kubera status` | Login state + configured project/env/base URL |
+| `kubera login` / `kubera logout` | Sign in / out via the bundled `infisical` flow |
+| `kubera config show` | Print resolved config (`--json` for machine-readable) |
+| `kubera config set --project <id> --env dev --path / --base-url <url>` | Update fields (also writable from the GUI) |
+| `kubera config clear` | Wipe `~/.config/kubera/config.json` |
+| `kubera projects` | List projects you can access (`--json`) |
+| `kubera envs` | Envs in the configured project |
+| `kubera ls` | List secret keys (no values by default; `--values`, `--json`, `--tag <slug>`) |
+| `kubera get <KEY>` | Print one value to stdout |
+| `kubera copy <KEY>` | Copy to clipboard via `pbcopy` |
+| `kubera info <KEY>` | Full metadata: version, comment, tags, expiry, service URL |
+| `kubera set <KEY> <VALUE>` | Upsert (create or update). `<VALUE>` of `-` reads from stdin. `--comment`, `--tag <id>` |
+| `kubera rm <KEY> [--force]` | Delete, with confirm prompt unless forced |
+| `kubera export --format dotenv\|json\|shell` | Dump every secret in the chosen format |
+| `kubera run -- <cmd> [args…]` | Inject secrets as env vars and exec the subcommand (`kubera run -- npm run dev`) |
+| `kubera tags` / `kubera tags create <name>` | List or create tags |
+| `kubera open` / `kubera open --dashboard` | Launch the macOS app or the Infisical web dashboard |
+
+`kubera --help` covers the full surface. Most read commands accept `--json` for piping into `jq`. When the menu is in **All Environments** mode, set a default env in **Settings → Default for Add** so writes (`set`, `rm`) and the Add Secret form know which env to target — the CLI honors this fallback automatically.
+
+## Claude Code skill
+
+A [`SKILL.md`](./SKILL.md) at the repo root teaches Claude Code (and other agents that use the [vercel-labs/skills](https://github.com/vercel-labs/skills) loader) how to drive the `kubera` CLI safely — preflight checks, when to use `copy`/`run` vs `get`, recipes for `.env` bootstrap and key rotation.
+
+Install it into your project (or globally) with the `skills` npm package:
+
 ```bash
-kubera status                       # login state, configured project/env
-kubera ls                           # list keys (no values)
-kubera ls --values                  # include values
-kubera get DB_URL                   # print one value
-kubera copy DB_URL                  # copy via pbcopy
-kubera set DB_URL postgres://...    # upsert (create or update)
-kubera rm DB_URL --force            # delete
-kubera export --format dotenv > .env
-kubera run -- npm run dev           # inject all secrets as env vars and exec
-kubera projects                     # list projects you can access
-kubera config set --project <id> --env dev
+# project-scoped — commits .claude/skills/kubera/ into the repo
+npx skills add ptmaroct/kubera --agent claude-code
+
+# global, for all projects on this machine
+npx skills add ptmaroct/kubera --agent claude-code --scope user
 ```
 
-`kubera --help` for the full subcommand list. JSON output is available on most read commands via `--json`.
-
-When the menu is in **All Environments** mode, set a default env in **Settings → Default for Add** so writes (`set`, `rm`) and the Add Secret form know which env to target. The CLI honors this fallback automatically.
+The skill assumes the `kubera` binary is on `$PATH`. If it isn't yet, run the curl installer or `brew install --cask kubera` first.
 
 ## Project Structure
 

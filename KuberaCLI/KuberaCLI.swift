@@ -17,6 +17,7 @@ struct Kubera: AsyncParsableCommand {
             Envs.self,
             List.self,
             Get.self,
+            Info.self,
             Copy.self,
             Set.self,
             Remove.self,

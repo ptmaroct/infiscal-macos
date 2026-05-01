@@ -58,16 +58,45 @@ struct Envs: AsyncParsableCommand {
 }
 
 struct Tags: AsyncParsableCommand {
-    static let configuration = CommandConfiguration(abstract: "List tags defined in the configured project.")
+    static let configuration = CommandConfiguration(
+        abstract: "Manage tags on the configured project.",
+        subcommands: [TagsList.self, TagCreate.self],
+        defaultSubcommand: TagsList.self
+    )
+}
+
+struct TagsList: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(commandName: "list", abstract: "List tags.")
 
     @Flag(help: "Emit JSON.") var json: Bool = false
 
     func run() async throws {
         let cfg = try Helpers.requireConfig()
+        guard !cfg.isAllProjects else {
+            throw ValidationError("`tags` requires a single project. Switch off All Projects in Settings or pass --project.")
+        }
         let tags = try await InfisicalCLIService.fetchTags(projectId: cfg.projectId, baseURL: cfg.baseURL)
         if json { try Helpers.emitJSON(tags); return }
         for t in tags {
             print("\(t.id)\t\(t.slug)\t\(t.color ?? "-")")
         }
+    }
+}
+
+struct TagCreate: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(commandName: "create", abstract: "Create a new tag in the configured project.")
+
+    @Argument(help: "Tag name (slug derived automatically).") var name: String
+    @Option(name: .long, help: "Hex color, e.g. #F5A524.") var color: String = "#F5A524"
+
+    func run() async throws {
+        let cfg = try Helpers.requireConfig()
+        guard !cfg.isAllProjects else {
+            throw ValidationError("`tag create` requires a single project.")
+        }
+        let tag = try await InfisicalCLIService.createTag(
+            name: name, projectId: cfg.projectId, color: color, baseURL: cfg.baseURL
+        )
+        Helpers.warn("created tag \(tag.slug) (id \(tag.id))")
     }
 }

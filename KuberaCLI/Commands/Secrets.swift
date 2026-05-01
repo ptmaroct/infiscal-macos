@@ -12,15 +12,24 @@ struct List: AsyncParsableCommand {
 
     @Option(name: .long, help: "Override environment slug.") var env: String?
     @Option(name: .long, help: "Override secret path.") var path: String?
+    @Option(name: [.short, .long], help: "Filter to secrets carrying this tag slug. Repeat for OR-match.")
+    var tag: [String] = []
     @Flag(name: .long, help: "Include values in the output. Off by default to avoid leaking secrets.")
     var values: Bool = false
     @Flag(help: "Emit JSON.") var json: Bool = false
 
     func run() async throws {
         let cfg = try Helpers.requireConfig()
-        let secrets = try await Helpers.fetchSecrets(
+        var secrets = try await Helpers.fetchSecrets(
             config: cfg, envOverride: env, pathOverride: path
         )
+        if !tag.isEmpty {
+            let wanted = Swift.Set(tag)
+            secrets = secrets.filter { secret in
+                guard let tags = secret.tags else { return false }
+                return tags.contains { wanted.contains($0.slug) }
+            }
+        }
         if json {
             if values {
                 try Helpers.emitJSON(secrets)
@@ -37,6 +46,40 @@ struct List: AsyncParsableCommand {
                 print("\(s.key)\(envTag)")
             }
         }
+    }
+}
+
+// MARK: - Info
+
+struct Info: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "Show full metadata for a secret: version, comment, tags, expiry, service URL."
+    )
+
+    @Argument(help: "Secret key.") var key: String
+    @Option(name: .long, help: "Override environment slug.") var env: String?
+    @Flag(help: "Emit JSON.") var json: Bool = false
+
+    func run() async throws {
+        let cfg = try Helpers.requireConfig()
+        let secrets = try await Helpers.fetchSecrets(config: cfg, envOverride: env)
+        guard let secret = secrets.first(where: { $0.key == key }) else {
+            throw ValidationError("Secret '\(key)' not found.")
+        }
+        if json { try Helpers.emitJSON(secret); return }
+        print("key:        \(secret.key)")
+        print("env:        \(secret.environment ?? cfg.environment)")
+        print("version:    \(secret.version.map(String.init) ?? "-")")
+        print("comment:    \(secret.comment ?? "-")")
+        print("tags:       \(secret.tags?.map(\.slug).joined(separator: ", ") ?? "-")")
+        if let expiry = secret.expiryDate {
+            print("expires:    \(SecretMetadataDateFormatter.string(from: expiry))")
+        }
+        if let url = secret.serviceURL {
+            print("service:    \(url.absoluteString)")
+        }
+        print("createdAt:  \(secret.createdAt ?? "-")")
+        print("updatedAt:  \(secret.updatedAt ?? "-")")
     }
 }
 
