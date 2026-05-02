@@ -38,6 +38,11 @@ if [ -f "$PROJECT_DIR/Kubera/Assets.xcassets/AppIcon.icns" ]; then
     cp "$PROJECT_DIR/Kubera/Assets.xcassets/AppIcon.icns" "$APP_DIR/Contents/Resources/AppIcon.icns"
 fi
 
+# Ad-hoc sign so Gatekeeper on macOS 14.4+/15 accepts the unsigned bundle
+# instead of flagging it as "damaged" and offering to move it to Trash.
+codesign --force --deep --sign - "$APP_DIR/Contents/Resources/kubera" 2>/dev/null || true
+codesign --force --deep --sign - "$APP_DIR"
+
 echo "App bundle created at: $APP_DIR"
 echo "Run with: open $APP_DIR"
 echo "CLI inside bundle:    $APP_DIR/Contents/Resources/kubera"

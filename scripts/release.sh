@@ -36,6 +36,12 @@ if [[ -f "Kubera/Assets.xcassets/AppIcon.icns" ]]; then
   cp "Kubera/Assets.xcassets/AppIcon.icns" "$APP_DIR/Contents/Resources/AppIcon.icns"
 fi
 
+echo "==> Ad-hoc signing bundle"
+# Required so macOS 14.4+/15 Gatekeeper does not flag the unsigned app as
+# "damaged" and prompt the user to move it to Trash on first launch.
+codesign --force --deep --sign - "$APP_DIR/Contents/Resources/kubera" 2>/dev/null || true
+codesign --force --deep --sign - "$APP_DIR"
+
 echo "==> Creating DMG"
 DMG="$ROOT/build/Kubera.dmg"
 rm -f "$DMG"
@@ -63,10 +69,7 @@ else
   echo "    gh CLI not found — upload $DMG to GitHub release $TAG manually."
 fi
 
-cat <<EOF
-
-==> Homebrew cask block (paste into ptmaroct/homebrew-kubera Casks/kubera.rb):
-
+CASK_BODY=$(cat <<EOF
 cask "kubera" do
   version "$VERSION"
   sha256 "$SHA"
@@ -90,5 +93,36 @@ cask "kubera" do
     "~/Library/Application Support/Kubera",
   ]
 end
-
 EOF
+)
+
+TAP_REPO="${KUBERA_TAP_REPO:-ptmaroct/homebrew-kubera}"
+if command -v gh >/dev/null 2>&1; then
+  echo "==> Bumping Homebrew tap $TAP_REPO to $VERSION"
+  TAP_DIR=$(mktemp -d -t kubera-tap)
+  if gh repo clone "$TAP_REPO" "$TAP_DIR" -- --quiet; then
+    mkdir -p "$TAP_DIR/Casks"
+    printf '%s\n' "$CASK_BODY" > "$TAP_DIR/Casks/kubera.rb"
+    if git -C "$TAP_DIR" diff --quiet -- Casks/kubera.rb; then
+      echo "    cask already at $VERSION — no change"
+    else
+      git -C "$TAP_DIR" add Casks/kubera.rb
+      git -C "$TAP_DIR" -c user.email="release-bot@kubera" -c user.name="kubera-release" \
+        commit -m "kubera $VERSION" >/dev/null
+      if git -C "$TAP_DIR" push --quiet; then
+        echo "    pushed cask bump to $TAP_REPO"
+      else
+        echo "    push failed — cask block printed below for manual update" >&2
+        printf '\n%s\n\n' "$CASK_BODY"
+      fi
+    fi
+    rm -rf "$TAP_DIR"
+  else
+    echo "    clone failed — cask block printed below for manual update" >&2
+    printf '\n%s\n\n' "$CASK_BODY"
+    rm -rf "$TAP_DIR"
+  fi
+else
+  echo "==> gh CLI not found — paste cask block into $TAP_REPO/Casks/kubera.rb:"
+  printf '\n%s\n\n' "$CASK_BODY"
+fi
